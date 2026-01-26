@@ -1,0 +1,41 @@
+# GenAI Automation Framework - Python Dependencies
+# Version: 1.1 (Local-First)
+
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Database
+sqlalchemy==2.0.25
+aiosqlite==0.19.0
+
+# RAG Engine
+faiss-cpu==1.7.4
+sentence-transformers==2.3.1
+numpy==1.26.3
+
+# Ollama Client
+ollama==0.1.6
+httpx==0.26.0
+
+# Automation
+playwright==1.41.0
+appium-python-client==3.1.0
+
+# Code Analysis & Guardrails
+astunparse==1.6.3
+
+# Utilities
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+uuid6==2024.1.12
+loguru==0.7.2
+aiofiles==23.2.1
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+httpx==0.26.0

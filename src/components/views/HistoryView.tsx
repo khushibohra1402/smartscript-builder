@@ -7,9 +7,12 @@ import {
   Search,
   Filter,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { ExecutionResult, ExecutionStatus } from '@/types/automation';
+import { useExecutionHistory, useProjects } from '@/hooks/useApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -20,75 +23,6 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-
-const mockHistory: ExecutionResult[] = [
-  {
-    execution_id: 'exec-001',
-    status: 'PASS',
-    testName: 'Login Flow - Google OAuth',
-    projectName: 'YouTube Automation',
-    metrics: { total_duration: 12.4, avg_response_time: 0.3, step_success_rate: 100 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-001.mp4', screenshot_failure: null },
-    ai_analysis: 'All steps completed successfully.',
-    createdAt: '2024-01-20T10:30:00Z',
-  },
-  {
-    execution_id: 'exec-002',
-    status: 'FAIL',
-    testName: 'Search Functionality Test',
-    projectName: 'E-Commerce Portal',
-    metrics: { total_duration: 8.2, avg_response_time: 0.45, step_success_rate: 67 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-002.mp4', screenshot_failure: '/screenshots/exec-002-fail.png' },
-    ai_analysis: 'Search button not found after page load.',
-    createdAt: '2024-01-20T09:15:00Z',
-  },
-  {
-    execution_id: 'exec-003',
-    status: 'WARNING',
-    testName: 'Checkout Process',
-    projectName: 'E-Commerce Portal',
-    metrics: { total_duration: 24.1, avg_response_time: 0.8, step_success_rate: 85 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-003.mp4', screenshot_failure: null },
-    ai_analysis: 'Completed with warnings. Payment step slower than expected.',
-    createdAt: '2024-01-20T08:45:00Z',
-  },
-  {
-    execution_id: 'exec-004',
-    status: 'PASS',
-    testName: 'User Registration',
-    projectName: 'Mobile Banking App',
-    metrics: { total_duration: 18.7, avg_response_time: 0.5, step_success_rate: 100 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-004.mp4', screenshot_failure: null },
-    ai_analysis: 'Registration flow completed successfully.',
-    createdAt: '2024-01-19T16:20:00Z',
-  },
-  {
-    execution_id: 'exec-005',
-    status: 'PASS',
-    testName: 'Video Playback Test',
-    projectName: 'YouTube Automation',
-    metrics: { total_duration: 22.1, avg_response_time: 0.4, step_success_rate: 100 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-005.mp4', screenshot_failure: null },
-    ai_analysis: 'Video playback verified across quality settings.',
-    createdAt: '2024-01-19T14:00:00Z',
-  },
-  {
-    execution_id: 'exec-006',
-    status: 'FAIL',
-    testName: 'Password Reset Flow',
-    projectName: 'Mobile Banking App',
-    metrics: { total_duration: 15.3, avg_response_time: 0.6, step_success_rate: 50 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-006.mp4', screenshot_failure: '/screenshots/exec-006-fail.png' },
-    ai_analysis: 'Email verification link timeout.',
-    createdAt: '2024-01-19T11:30:00Z',
-  },
-];
 
 const statusConfig: Record<ExecutionStatus, { icon: React.ReactNode; className: string }> = {
   PASS: { icon: <CheckCircle2 className="w-4 h-4" />, className: 'status-pass' },
@@ -107,15 +41,50 @@ export function HistoryView({ onViewResult }: HistoryViewProps) {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [projectFilter, setProjectFilter] = useState<string>('all');
 
-  const filteredHistory = mockHistory.filter(item => {
-    const matchesSearch = item.testName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         item.projectName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    const matchesProject = projectFilter === 'all' || item.projectName === projectFilter;
-    return matchesSearch && matchesStatus && matchesProject;
+  // Fetch data from API
+  const { 
+    data: executions, 
+    isLoading: isLoadingExecutions, 
+    error: executionsError 
+  } = useExecutionHistory({
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    project_id: projectFilter !== 'all' ? projectFilter : undefined,
   });
 
-  const projects = [...new Set(mockHistory.map(h => h.projectName))];
+  const { data: projects } = useProjects();
+
+  // Client-side search filter (API doesn't support search by name)
+  const filteredHistory = executions?.filter(item => {
+    if (!searchQuery) return true;
+    return item.test_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+           item.project_name.toLowerCase().includes(searchQuery.toLowerCase());
+  }) || [];
+
+  if (isLoadingExecutions) {
+    return (
+      <div className="p-6">
+        <div className="glass-card p-8 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (executionsError) {
+    return (
+      <div className="p-6">
+        <div className="glass-card p-8 flex flex-col items-center gap-4 text-center">
+          <AlertCircle className="w-12 h-12 text-destructive" />
+          <div>
+            <h3 className="font-semibold text-foreground mb-1">Failed to Load History</h3>
+            <p className="text-sm text-muted-foreground">
+              Could not connect to the backend. Make sure the server is running on port 8000.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -151,8 +120,8 @@ export function HistoryView({ onViewResult }: HistoryViewProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Projects</SelectItem>
-              {projects.map(project => (
-                <SelectItem key={project} value={project}>{project}</SelectItem>
+              {projects?.map(project => (
+                <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -181,11 +150,31 @@ export function HistoryView({ onViewResult }: HistoryViewProps) {
           <tbody className="divide-y divide-border">
             {filteredHistory.map((execution) => {
               const status = statusConfig[execution.status];
+              
+              const handleClick = () => {
+                const result: ExecutionResult = {
+                  execution_id: execution.execution_id,
+                  status: execution.status,
+                  testName: execution.test_name,
+                  projectName: execution.project_name,
+                  metrics: {
+                    total_duration: execution.total_duration || 0,
+                    avg_response_time: 0,
+                    step_success_rate: execution.step_success_rate || 0,
+                  },
+                  steps: [],
+                  artifacts: { video_path: '', screenshot_failure: null },
+                  ai_analysis: '',
+                  createdAt: execution.created_at,
+                };
+                onViewResult(result);
+              };
+
               return (
                 <tr 
                   key={execution.execution_id}
                   className="hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => onViewResult(execution)}
+                  onClick={handleClick}
                 >
                   <td className="p-4">
                     <div className={cn(
@@ -196,26 +185,26 @@ export function HistoryView({ onViewResult }: HistoryViewProps) {
                     </div>
                   </td>
                   <td className="p-4">
-                    <p className="font-medium text-foreground">{execution.testName}</p>
+                    <p className="font-medium text-foreground">{execution.test_name}</p>
                     <p className="text-xs text-muted-foreground">{execution.execution_id}</p>
                   </td>
                   <td className="p-4 text-sm text-muted-foreground">
-                    {execution.projectName}
+                    {execution.project_name}
                   </td>
                   <td className="p-4 text-sm text-foreground font-mono">
-                    {execution.metrics.total_duration}s
+                    {execution.total_duration?.toFixed(1) || '?'}s
                   </td>
                   <td className="p-4">
                     <span className={cn(
                       "text-sm font-medium",
-                      execution.metrics.step_success_rate === 100 ? 'text-success' :
-                      execution.metrics.step_success_rate >= 80 ? 'text-warning' : 'text-destructive'
+                      (execution.step_success_rate || 0) === 100 ? 'text-success' :
+                      (execution.step_success_rate || 0) >= 80 ? 'text-warning' : 'text-destructive'
                     )}>
-                      {execution.metrics.step_success_rate}%
+                      {execution.step_success_rate?.toFixed(0) || '?'}%
                     </span>
                   </td>
                   <td className="p-4 text-sm text-muted-foreground">
-                    {new Date(execution.createdAt).toLocaleDateString()}
+                    {new Date(execution.created_at).toLocaleDateString()}
                   </td>
                   <td className="p-4">
                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -228,7 +217,12 @@ export function HistoryView({ onViewResult }: HistoryViewProps) {
 
         {filteredHistory.length === 0 && (
           <div className="p-12 text-center">
-            <p className="text-muted-foreground">No executions match your filters</p>
+            <p className="text-muted-foreground">
+              {executions?.length === 0 
+                ? "No executions yet. Run a test to see history here."
+                : "No executions match your filters"
+              }
+            </p>
           </div>
         )}
       </div>

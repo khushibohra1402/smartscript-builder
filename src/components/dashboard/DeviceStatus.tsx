@@ -1,15 +1,54 @@
-import { Monitor, Smartphone, Wifi, WifiOff } from 'lucide-react';
-import { DeviceStatus as DeviceStatusType } from '@/types/automation';
+import { Monitor, Smartphone, Wifi, WifiOff, Loader2, AlertCircle } from 'lucide-react';
+import { useConnectedDevices } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
 
-const mockDevices: DeviceStatusType[] = [
-  { id: 'dev-1', name: 'Chrome Browser', type: 'web', platform: 'chrome', status: 'ready', lastSeen: '2024-01-20T10:30:00Z' },
-  { id: 'dev-2', name: 'Firefox Browser', type: 'web', platform: 'firefox', status: 'ready', lastSeen: '2024-01-20T10:30:00Z' },
-  { id: 'dev-3', name: 'Samsung Galaxy S23', type: 'mobile', platform: 'android', status: 'busy', lastSeen: '2024-01-20T10:28:00Z' },
-  { id: 'dev-4', name: 'iPhone 15 Pro', type: 'mobile', platform: 'ios', status: 'offline', lastSeen: '2024-01-19T18:00:00Z' },
-];
-
 export function DeviceStatusPanel() {
+  const { data: devices, isLoading, error } = useConnectedDevices();
+
+  if (isLoading) {
+    return (
+      <div className="glass-card animate-slide-up">
+        <div className="p-4 border-b border-border">
+          <h3 className="font-semibold text-foreground">Connected Devices</h3>
+        </div>
+        <div className="p-8 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="glass-card animate-slide-up">
+        <div className="p-4 border-b border-border">
+          <h3 className="font-semibold text-foreground">Connected Devices</h3>
+        </div>
+        <div className="p-6 flex flex-col items-center gap-2 text-center">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-sm text-muted-foreground">
+            Failed to load devices. Is the backend running?
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!devices || devices.length === 0) {
+    return (
+      <div className="glass-card animate-slide-up">
+        <div className="p-4 border-b border-border">
+          <h3 className="font-semibold text-foreground">Connected Devices</h3>
+        </div>
+        <div className="p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No devices connected. Start the backend and connect a browser or mobile device.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="glass-card animate-slide-up">
       <div className="p-4 border-b border-border">
@@ -17,7 +56,7 @@ export function DeviceStatusPanel() {
       </div>
 
       <div className="p-4 space-y-3">
-        {mockDevices.map((device) => (
+        {devices.map((device) => (
           <div
             key={device.id}
             className={cn(
@@ -32,7 +71,7 @@ export function DeviceStatusPanel() {
               device.status === 'ready' ? "bg-success/10" :
               device.status === 'busy' ? "bg-warning/10" : "bg-muted"
             )}>
-              {device.type === 'web' ? (
+              {device.device_type === 'web' ? (
                 <Monitor className={cn(
                   "w-5 h-5",
                   device.status === 'ready' ? "text-success" :

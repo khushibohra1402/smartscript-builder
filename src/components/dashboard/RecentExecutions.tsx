@@ -1,54 +1,8 @@
-import { CheckCircle2, XCircle, AlertTriangle, Clock, ChevronRight } from 'lucide-react';
+import { CheckCircle2, XCircle, AlertTriangle, Clock, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 import { ExecutionResult, ExecutionStatus } from '@/types/automation';
+import { useExecutionHistory } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-
-const mockExecutions: ExecutionResult[] = [
-  {
-    execution_id: 'exec-001',
-    status: 'PASS',
-    testName: 'Login Flow - Google OAuth',
-    projectName: 'YouTube Automation',
-    metrics: { total_duration: 12.4, avg_response_time: 0.3, step_success_rate: 100 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-001.mp4', screenshot_failure: null },
-    ai_analysis: 'All steps completed successfully.',
-    createdAt: '2024-01-20T10:30:00Z',
-  },
-  {
-    execution_id: 'exec-002',
-    status: 'FAIL',
-    testName: 'Search Functionality Test',
-    projectName: 'E-Commerce Portal',
-    metrics: { total_duration: 8.2, avg_response_time: 0.45, step_success_rate: 67 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-002.mp4', screenshot_failure: '/screenshots/exec-002-fail.png' },
-    ai_analysis: 'Search button not found after page load. Consider adding a wait condition.',
-    createdAt: '2024-01-20T09:15:00Z',
-  },
-  {
-    execution_id: 'exec-003',
-    status: 'WARNING',
-    testName: 'Checkout Process',
-    projectName: 'E-Commerce Portal',
-    metrics: { total_duration: 24.1, avg_response_time: 0.8, step_success_rate: 85 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-003.mp4', screenshot_failure: null },
-    ai_analysis: 'Completed with warnings. Payment step slower than expected.',
-    createdAt: '2024-01-20T08:45:00Z',
-  },
-  {
-    execution_id: 'exec-004',
-    status: 'PASS',
-    testName: 'User Registration',
-    projectName: 'Mobile Banking App',
-    metrics: { total_duration: 18.7, avg_response_time: 0.5, step_success_rate: 100 },
-    steps: [],
-    artifacts: { video_path: '/videos/exec-004.mp4', screenshot_failure: null },
-    ai_analysis: 'Registration flow completed successfully on Android device.',
-    createdAt: '2024-01-19T16:20:00Z',
-  },
-];
 
 const statusConfig: Record<ExecutionStatus, { icon: React.ReactNode; className: string }> = {
   PASS: { icon: <CheckCircle2 className="w-4 h-4" />, className: 'status-pass' },
@@ -63,6 +17,52 @@ interface RecentExecutionsProps {
 }
 
 export function RecentExecutions({ onViewResult }: RecentExecutionsProps) {
+  const { data: executions, isLoading, error } = useExecutionHistory({ limit: 4 });
+
+  if (isLoading) {
+    return (
+      <div className="glass-card animate-slide-up">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Recent Executions</h3>
+        </div>
+        <div className="p-8 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="glass-card animate-slide-up">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Recent Executions</h3>
+        </div>
+        <div className="p-6 flex flex-col items-center gap-2 text-center">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <p className="text-sm text-muted-foreground">
+            Failed to load executions. Is the backend running?
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!executions || executions.length === 0) {
+    return (
+      <div className="glass-card animate-slide-up">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h3 className="font-semibold text-foreground">Recent Executions</h3>
+        </div>
+        <div className="p-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            No executions yet. Run a test to see results here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="glass-card animate-slide-up">
       <div className="p-4 border-b border-border flex items-center justify-between">
@@ -74,12 +74,33 @@ export function RecentExecutions({ onViewResult }: RecentExecutionsProps) {
       </div>
       
       <div className="divide-y divide-border">
-        {mockExecutions.map((execution) => {
+        {executions.map((execution) => {
           const status = statusConfig[execution.status];
+          
+          // Create a minimal ExecutionResult for the callback
+          const handleClick = () => {
+            const result: ExecutionResult = {
+              execution_id: execution.execution_id,
+              status: execution.status,
+              testName: execution.test_name,
+              projectName: execution.project_name,
+              metrics: {
+                total_duration: execution.total_duration || 0,
+                avg_response_time: 0,
+                step_success_rate: execution.step_success_rate || 0,
+              },
+              steps: [],
+              artifacts: { video_path: '', screenshot_failure: null },
+              ai_analysis: '',
+              createdAt: execution.created_at,
+            };
+            onViewResult(result);
+          };
+
           return (
             <button
               key={execution.execution_id}
-              onClick={() => onViewResult(execution)}
+              onClick={handleClick}
               className="w-full p-4 flex items-center gap-4 hover:bg-muted/50 transition-colors text-left"
             >
               <div className={cn(
@@ -91,16 +112,16 @@ export function RecentExecutions({ onViewResult }: RecentExecutionsProps) {
               
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm text-foreground truncate">
-                  {execution.testName}
+                  {execution.test_name}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {execution.projectName} • {execution.metrics.total_duration}s
+                  {execution.project_name} • {execution.total_duration?.toFixed(1) || '?'}s
                 </p>
               </div>
 
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">
-                  {new Date(execution.createdAt).toLocaleTimeString([], { 
+                  {new Date(execution.created_at).toLocaleTimeString([], { 
                     hour: '2-digit', 
                     minute: '2-digit' 
                   })}
@@ -110,7 +131,7 @@ export function RecentExecutions({ onViewResult }: RecentExecutionsProps) {
                   execution.status === 'PASS' ? 'text-success' : 
                   execution.status === 'FAIL' ? 'text-destructive' : 'text-warning'
                 )}>
-                  {execution.metrics.step_success_rate}%
+                  {execution.step_success_rate?.toFixed(0) || '?'}%
                 </p>
               </div>
 

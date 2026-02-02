@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { ChevronDown, Monitor, Smartphone, Check, AlertCircle } from 'lucide-react';
+import { Monitor, Smartphone, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,14 +9,9 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { TestConfiguration, DeviceType, Platform, TestType, Project } from '@/types/automation';
+import { TestConfiguration, DeviceType, Platform, TestType } from '@/types/automation';
+import { useProjects } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
-
-const mockProjects: Project[] = [
-  { id: 'proj-1', name: 'YouTube Automation', description: 'Video streaming tests', libraryPath: '/libs/youtube', createdAt: '2024-01-15' },
-  { id: 'proj-2', name: 'E-Commerce Portal', description: 'Shopping flow tests', libraryPath: '/libs/ecommerce', createdAt: '2024-01-10' },
-  { id: 'proj-3', name: 'Mobile Banking App', description: 'Banking transactions', libraryPath: '/libs/banking', createdAt: '2024-01-05' },
-];
 
 const platformOptions: Record<DeviceType, { value: Platform; label: string }[]> = {
   web: [
@@ -46,6 +40,8 @@ export function ConfigurationPanel({
   onValidateDevice,
   isValidating,
 }: ConfigurationPanelProps) {
+  const { data: projects, isLoading: isLoadingProjects, error: projectsError } = useProjects();
+
   const updateConfig = <K extends keyof TestConfiguration>(
     key: K,
     value: TestConfiguration[K]
@@ -72,15 +68,43 @@ export function ConfigurationPanel({
           <Select
             value={config.project?.id || ''}
             onValueChange={(value) => {
-              const project = mockProjects.find(p => p.id === value);
-              updateConfig('project', project || null);
+              const project = projects?.find(p => p.id === value);
+              if (project) {
+                updateConfig('project', {
+                  id: project.id,
+                  name: project.name,
+                  description: project.description || '',
+                  libraryPath: project.library_path,
+                  createdAt: project.created_at,
+                });
+              } else {
+                updateConfig('project', null);
+              }
             }}
+            disabled={isLoadingProjects}
           >
             <SelectTrigger className="bg-secondary border-border">
-              <SelectValue placeholder="Select a project" />
+              {isLoadingProjects ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Loading projects...</span>
+                </div>
+              ) : (
+                <SelectValue placeholder="Select a project" />
+              )}
             </SelectTrigger>
             <SelectContent>
-              {mockProjects.map((project) => (
+              {projectsError && (
+                <div className="p-2 text-sm text-destructive">
+                  Failed to load projects. Is the backend running?
+                </div>
+              )}
+              {projects?.length === 0 && (
+                <div className="p-2 text-sm text-muted-foreground">
+                  No projects found. Create one first.
+                </div>
+              )}
+              {projects?.map((project) => (
                 <SelectItem key={project.id} value={project.id}>
                   <div className="flex flex-col">
                     <span>{project.name}</span>

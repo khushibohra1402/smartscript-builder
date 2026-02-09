@@ -1,24 +1,64 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { DashboardView } from '@/components/views/DashboardView';
 import { ExecuteView } from '@/components/views/ExecuteView';
 import { HistoryView } from '@/components/views/HistoryView';
+import { ProjectsView } from '@/components/views/ProjectsView';
+import { DevicesView } from '@/components/views/DevicesView';
+import { SettingsView } from '@/components/views/SettingsView';
 import { ResultsViewer } from '@/components/results/ResultsViewer';
 import { ExecutionResult } from '@/types/automation';
 
-const viewConfig: Record<string, { title: string; subtitle?: string }> = {
-  dashboard: { title: 'Dashboard', subtitle: 'Overview of your automation framework' },
-  execute: { title: 'Execute Test', subtitle: 'Configure and run AI-generated tests' },
-  history: { title: 'Execution History', subtitle: 'View past test executions' },
-  projects: { title: 'Projects', subtitle: 'Manage your automation projects' },
-  devices: { title: 'Connected Devices', subtitle: 'View and manage devices' },
-  settings: { title: 'Settings', subtitle: 'Configure your automation framework' },
+const viewConfig: Record<string, { title: string; subtitle?: string; route: string }> = {
+  dashboard: { title: 'Dashboard', subtitle: 'Overview of your automation framework', route: '/dashboard' },
+  execute: { title: 'Execute Test', subtitle: 'Configure and run AI-generated tests', route: '/execute' },
+  history: { title: 'Execution History', subtitle: 'View past test executions', route: '/history' },
+  projects: { title: 'Projects', subtitle: 'Manage your automation projects', route: '/projects' },
+  devices: { title: 'Connected Devices', subtitle: 'View and manage devices', route: '/devices' },
+  settings: { title: 'Settings', subtitle: 'Configure your automation framework', route: '/settings' },
 };
 
-export default function Index() {
-  const [activeView, setActiveView] = useState('dashboard');
+interface IndexProps {
+  initialView?: string;
+}
+
+export default function Index({ initialView }: IndexProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Determine active view from route or prop
+  const getViewFromPath = (path: string): string => {
+    const routeToView: Record<string, string> = {
+      '/': 'dashboard',
+      '/dashboard': 'dashboard',
+      '/execute': 'execute',
+      '/history': 'history',
+      '/projects': 'projects',
+      '/devices': 'devices',
+      '/settings': 'settings',
+    };
+    return routeToView[path] || 'dashboard';
+  };
+
+  const [activeView, setActiveView] = useState(initialView || getViewFromPath(location.pathname));
   const [selectedResult, setSelectedResult] = useState<ExecutionResult | null>(null);
+
+  // Sync view with route changes
+  useEffect(() => {
+    const viewFromPath = getViewFromPath(location.pathname);
+    if (viewFromPath !== activeView && !initialView) {
+      setActiveView(viewFromPath);
+    }
+  }, [location.pathname, initialView, activeView]);
+
+  const handleViewChange = (view: string) => {
+    setActiveView(view);
+    setSelectedResult(null);
+    const route = viewConfig[view]?.route || '/';
+    navigate(route);
+  };
 
   const handleViewResult = (result: ExecutionResult) => {
     setSelectedResult(result);
@@ -32,7 +72,7 @@ export default function Index() {
     setSelectedResult(result);
   };
 
-  const currentConfig = viewConfig[activeView] || { title: 'Dashboard' };
+  const currentConfig = viewConfig[activeView] || { title: 'Dashboard', route: '/' };
 
   const renderView = () => {
     if (selectedResult) {
@@ -47,19 +87,11 @@ export default function Index() {
       case 'history':
         return <HistoryView onViewResult={handleViewResult} />;
       case 'projects':
+        return <ProjectsView />;
       case 'devices':
+        return <DevicesView />;
       case 'settings':
-        return (
-          <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">🚧</span>
-              </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">Coming Soon</h2>
-              <p className="text-muted-foreground">This feature is under development</p>
-            </div>
-          </div>
-        );
+        return <SettingsView />;
       default:
         return <DashboardView onViewResult={handleViewResult} />;
     }
@@ -67,7 +99,7 @@ export default function Index() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar activeView={activeView} onViewChange={setActiveView} />
+      <Sidebar activeView={activeView} onViewChange={handleViewChange} />
       
       <main className="flex-1 flex flex-col overflow-hidden">
         <Header 

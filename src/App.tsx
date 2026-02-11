@@ -33,6 +33,7 @@ const App = () => (
           <Route path="/projects" element={<Index initialView="projects" />} />
           <Route path="/devices" element={<Index initialView="devices" />} />
           <Route path="/settings" element={<Index initialView="settings" />} />
+          <Route path="/architecture" element={<Index initialView="architecture" />} />
           
           {/* Catch-all */}
           <Route path="*" element={<NotFound />} />

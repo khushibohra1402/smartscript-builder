@@ -12,7 +12,8 @@ import {
   Cpu,
   Sparkles,
   Server,
-  AlertCircle
+  AlertCircle,
+  BookOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useHealth, useOllamaStatus } from '@/hooks/useApi';
@@ -31,6 +32,7 @@ const navItems: NavItem[] = [
   { id: 'projects', label: 'Projects', icon: <FolderOpen className="w-5 h-5" />, route: '/projects' },
   { id: 'devices', label: 'Devices', icon: <Monitor className="w-5 h-5" />, route: '/devices' },
   { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" />, route: '/settings' },
+  { id: 'architecture', label: 'Architecture', icon: <BookOpen className="w-5 h-5" />, route: '/architecture' },
 ];
 
 interface SidebarProps {

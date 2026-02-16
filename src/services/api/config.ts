@@ -19,8 +19,8 @@ export const API_CONFIG = {
 
 export const API_ENDPOINTS = {
   // System
-  HEALTH: '/health',
-  OLLAMA_STATUS: '/system/ollama/status',
+  HEALTH: '/system/health',
+  OLLAMA_STATUS: '/system/status',
   
   // Projects
   PROJECTS: '/projects',

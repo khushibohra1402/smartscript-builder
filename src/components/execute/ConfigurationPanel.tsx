@@ -122,8 +122,7 @@ export function ConfigurationPanel({
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => {
-                updateConfig('deviceType', 'web');
-                updateConfig('platform', 'chrome');
+                onConfigChange({ ...config, deviceType: 'web', platform: 'chrome' });
               }}
               className={cn(
                 "flex items-center justify-center gap-2 p-3 rounded-lg border transition-all",
@@ -137,8 +136,7 @@ export function ConfigurationPanel({
             </button>
             <button
               onClick={() => {
-                updateConfig('deviceType', 'mobile');
-                updateConfig('platform', 'android');
+                onConfigChange({ ...config, deviceType: 'mobile', platform: 'android' });
               }}
               className={cn(
                 "flex items-center justify-center gap-2 p-3 rounded-lg border transition-all",

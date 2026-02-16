@@ -47,8 +47,10 @@ export function useOllamaStatus() {
   return useQuery({
     queryKey: queryKeys.ollamaStatus,
     queryFn: () => apiClient.getOllamaStatus(),
-    refetchInterval: 60000, // Check every 60s
+    refetchInterval: 60000,
     retry: 1,
+    // The /system/status endpoint returns a broader object; 
+    // we just need a successful response to know the backend is reachable
   });
 }
 

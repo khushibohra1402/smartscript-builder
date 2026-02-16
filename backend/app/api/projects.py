@@ -58,18 +58,23 @@ async def create_project(
     session: AsyncSession = Depends(get_session)
 ):
     """Create a new project."""
-    # Verify library path exists
-    library_path = Path(project.library_path)
-    if not library_path.exists():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Library path does not exist: {project.library_path}"
-        )
+    # Ensure project directory exists (create if needed)
+    from app.config import settings
+    import os
+    
+    project_dir = os.path.join(str(settings.PROJECTS_ROOT), project.name.replace(" ", "_").lower())
+    os.makedirs(project_dir, exist_ok=True)
+    
+    # Use provided library_path or default to project directory
+    library_path = Path(project.library_path) if project.library_path else Path(project_dir)
+    if project.library_path and not library_path.exists():
+        # Create the library path if it doesn't exist
+        library_path.mkdir(parents=True, exist_ok=True)
     
     db_project = Project(
         name=project.name,
         description=project.description,
-        library_path=project.library_path
+        library_path=str(library_path)
     )
     
     session.add(db_project)

@@ -25,8 +25,9 @@ export function ConnectionStatusOverlay() {
   } = useOllamaStatus();
 
   // Check connection status
-  const backendOnline = !healthError && health?.status === 'ok';
-  const ollamaOnline = !ollamaError && ollamaStatus?.is_available;
+  // Accept any successful response as "online" - don't parse body strictly
+  const backendOnline = !healthError && !!health;
+  const ollamaOnline = !ollamaError && !!ollamaStatus;
   const isLoading = healthLoading || ollamaLoading;
   const isRefetching = isRefetchingHealth || isRefetchingOllama;
   

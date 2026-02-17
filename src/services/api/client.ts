@@ -35,10 +35,11 @@ class ApiClient {
   // Generic request method with error handling
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    customTimeout?: number
   ): Promise<T> {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+    const timeoutId = setTimeout(() => controller.abort(), customTimeout || this.timeout);
 
     try {
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
@@ -91,11 +92,11 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'GET' });
   }
 
-  private post<T>(endpoint: string, data?: unknown): Promise<T> {
+  private post<T>(endpoint: string, data?: unknown, customTimeout?: number): Promise<T> {
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
-    });
+    }, customTimeout);
   }
 
   private put<T>(endpoint: string, data?: unknown): Promise<T> {
@@ -168,7 +169,9 @@ class ApiClient {
   // ============================================================================
 
   async generateScript(data: ScriptGenerationRequest): Promise<ScriptGenerationResponse> {
-    return this.post<ScriptGenerationResponse>(API_ENDPOINTS.SCRIPT_GENERATE, data);
+    return this.post<ScriptGenerationResponse>(
+      API_ENDPOINTS.SCRIPT_GENERATE, data, API_CONFIG.LLM_TIMEOUT
+    );
   }
 
   async validateScript(scriptCode: string): Promise<{ is_valid: boolean; errors: string[] }> {

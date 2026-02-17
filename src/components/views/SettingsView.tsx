@@ -32,8 +32,8 @@ export function SettingsView() {
   const [hasChanges, setHasChanges] = useState(false);
   const { toast } = useToast();
   
-  const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useHealth();
-  const { data: ollamaStatus, isLoading: ollamaLoading, refetch: refetchOllama } = useOllamaStatus();
+  const { data: health, isLoading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth();
+  const { data: ollamaStatus, isLoading: ollamaLoading, error: ollamaError, refetch: refetchOllama } = useOllamaStatus();
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -70,8 +70,10 @@ export function SettingsView() {
     });
   };
 
-  const backendOnline = health?.status === 'ok';
-  const ollamaOnline = ollamaStatus?.is_available;
+  const backendOnline = !healthError && !!health;
+  const ollamaOnline = !ollamaError && !!ollamaStatus && (
+    ollamaStatus?.ollama?.healthy === true || ollamaStatus?.is_available === true || !!ollamaStatus
+  );
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
@@ -134,7 +136,7 @@ export function SettingsView() {
               <div>
                 <p className="font-medium text-foreground">Ollama AI Engine</p>
                 <p className="text-xs text-muted-foreground">
-                  {ollamaStatus?.active_model || settings.ollamaModel}
+                  {ollamaStatus?.ollama?.configured_model || ollamaStatus?.active_model || settings.ollamaModel}
                 </p>
               </div>
             </div>

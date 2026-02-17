@@ -9,8 +9,11 @@ export const API_CONFIG = {
   // WebSocket URL
   WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8000',
   
-  // Request timeout in milliseconds
+  // Request timeout in milliseconds (default for most requests)
   TIMEOUT: 30000,
+  
+  // Extended timeout for LLM generation requests (matches backend 300s)
+  LLM_TIMEOUT: 310000,
   
   // Retry configuration
   RETRY_ATTEMPTS: 3,

@@ -24,12 +24,15 @@ import type {
 } from './types';
 
 class ApiClient {
-  private baseUrl: string;
   private timeout: number;
 
   constructor() {
-    this.baseUrl = API_CONFIG.BASE_URL;
     this.timeout = API_CONFIG.TIMEOUT;
+  }
+
+  // Always read the URL dynamically so changes via setBackendUrl() take effect
+  private get baseUrl(): string {
+    return API_CONFIG.BASE_URL;
   }
 
   // Generic request method with error handling

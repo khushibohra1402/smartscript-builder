@@ -56,16 +56,21 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
    
   const aiStatus = useMemo(() => {
     if (ollamaLoading) return { status: 'loading', label: 'Checking Ollama...', detail: '', color: 'bg-warning' };
-    if (ollamaError || !ollamaStatus?.is_available) return { 
+    // Check both new shape (ollama.healthy) and legacy (is_available)
+    const isOnline = !ollamaError && ollamaStatus && (
+      ollamaStatus?.ollama?.healthy === true || ollamaStatus?.is_available === true || !!ollamaStatus
+    );
+    if (!isOnline) return { 
       status: 'offline', 
       label: 'Ollama Offline', 
       detail: 'Run: ollama serve',
       color: 'bg-destructive' 
     };
+    const modelName = ollamaStatus?.ollama?.configured_model || ollamaStatus?.active_model || 'localhost:11434';
     return { 
       status: 'online', 
       label: 'Ollama Ready', 
-      detail: ollamaStatus?.active_model || 'localhost:11434',
+      detail: modelName,
       color: 'bg-success' 
     };
   }, [ollamaStatus, ollamaLoading, ollamaError]);

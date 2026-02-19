@@ -31,18 +31,30 @@ export function SettingsView() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [hasChanges, setHasChanges] = useState(false);
   const { toast } = useToast();
-  
-  const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useHealth();
-  const { data: ollamaStatus, isLoading: ollamaLoading, refetch: refetchOllama } = useOllamaStatus();
 
-  // Load settings from localStorage on mount
+  // TanStack Query v5 hooks
+  const {
+    data: healthData,
+    isLoading: healthLoading,
+    isError: healthIsError,
+    refetch: refetchHealth,
+  } = useHealth();
+
+  const {
+    data: ollamaData,
+    isLoading: ollamaLoading,
+    isError: ollamaIsError,
+    refetch: refetchOllama,
+  } = useOllamaStatus();
+
+  // Load saved settings
   useEffect(() => {
     const saved = localStorage.getItem('smartscript-settings');
     if (saved) {
       try {
         setSettings({ ...defaultSettings, ...JSON.parse(saved) });
       } catch {
-        // Use defaults if parsing fails
+        // fallback silently
       }
     }
   }, []);
@@ -70,8 +82,16 @@ export function SettingsView() {
     });
   };
 
-  const backendOnline = health?.status === 'ok';
-  const ollamaOnline = ollamaStatus?.is_available;
+  // ✅ Correct health logic
+  const backendOnline =
+    !healthLoading &&
+    !healthIsError &&
+    healthData !== undefined;
+
+  const ollamaOnline =
+    !ollamaLoading &&
+    !ollamaIsError &&
+    ollamaData?.ollama?.healthy === true;
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
@@ -79,7 +99,9 @@ export function SettingsView() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-foreground">Settings</h2>
-          <p className="text-muted-foreground">Configure your automation framework</p>
+          <p className="text-muted-foreground">
+            Configure your automation framework
+          </p>
         </div>
         <Button onClick={handleSave} disabled={!hasChanges}>
           <Save className="w-4 h-4 mr-2" />
@@ -90,29 +112,44 @@ export function SettingsView() {
       {/* Connection Status */}
       <div className="glass-card p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-foreground">Connection Status</h3>
+          <h3 className="text-lg font-semibold text-foreground">
+            Connection Status
+          </h3>
           <Button variant="outline" size="sm" onClick={handleTestConnections}>
-            <RefreshCw className={cn(
-              "w-4 h-4 mr-2",
-              (healthLoading || ollamaLoading) && "animate-spin"
-            )} />
+            <RefreshCw
+              className={cn(
+                'w-4 h-4 mr-2',
+                (healthLoading || ollamaLoading) && 'animate-spin'
+              )}
+            />
             Test Connections
           </Button>
         </div>
-        
+
         <div className="grid gap-4 md:grid-cols-2">
           {/* Backend Status */}
-          <div className={cn(
-            "flex items-center justify-between p-4 rounded-lg border",
-            backendOnline 
-              ? "bg-success/10 border-success/20" 
-              : "bg-destructive/10 border-destructive/20"
-          )}>
+          <div
+            className={cn(
+              'flex items-center justify-between p-4 rounded-lg border',
+              backendOnline
+                ? 'bg-success/10 border-success/20'
+                : 'bg-destructive/10 border-destructive/20'
+            )}
+          >
             <div className="flex items-center gap-3">
-              <Server className={cn("w-5 h-5", backendOnline ? "text-success" : "text-destructive")} />
+              <Server
+                className={cn(
+                  'w-5 h-5',
+                  backendOnline ? 'text-success' : 'text-destructive'
+                )}
+              />
               <div>
-                <p className="font-medium text-foreground">FastAPI Backend</p>
-                <p className="text-xs text-muted-foreground">{settings.apiUrl}</p>
+                <p className="font-medium text-foreground">
+                  FastAPI Backend
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {settings.apiUrl}
+                </p>
               </div>
             </div>
             {backendOnline ? (
@@ -123,18 +160,28 @@ export function SettingsView() {
           </div>
 
           {/* Ollama Status */}
-          <div className={cn(
-            "flex items-center justify-between p-4 rounded-lg border",
-            ollamaOnline 
-              ? "bg-success/10 border-success/20" 
-              : "bg-destructive/10 border-destructive/20"
-          )}>
+          <div
+            className={cn(
+              'flex items-center justify-between p-4 rounded-lg border',
+              ollamaOnline
+                ? 'bg-success/10 border-success/20'
+                : 'bg-destructive/10 border-destructive/20'
+            )}
+          >
             <div className="flex items-center gap-3">
-              <Sparkles className={cn("w-5 h-5", ollamaOnline ? "text-success" : "text-destructive")} />
+              <Sparkles
+                className={cn(
+                  'w-5 h-5',
+                  ollamaOnline ? 'text-success' : 'text-destructive'
+                )}
+              />
               <div>
-                <p className="font-medium text-foreground">Ollama AI Engine</p>
+                <p className="font-medium text-foreground">
+                  Ollama AI Engine
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  {ollamaStatus?.active_model || settings.ollamaModel}
+                  {ollamaData?.ollama?.configured_model ||
+                    settings.ollamaModel}
                 </p>
               </div>
             </div>
@@ -149,7 +196,9 @@ export function SettingsView() {
 
       {/* API Configuration */}
       <div className="glass-card p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-foreground">API Configuration</h3>
+        <h3 className="text-lg font-semibold text-foreground">
+          API Configuration
+        </h3>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="apiUrl">Backend URL</Label>
@@ -174,7 +223,9 @@ export function SettingsView() {
 
       {/* AI Configuration */}
       <div className="glass-card p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-foreground">AI Engine Configuration</h3>
+        <h3 className="text-lg font-semibold text-foreground">
+          AI Engine Configuration
+        </h3>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="ollamaHost">Ollama Host</Label>
@@ -204,18 +255,24 @@ export function SettingsView() {
 
       {/* Preferences */}
       <div className="glass-card p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-foreground">Preferences</h3>
-        
+        <h3 className="text-lg font-semibold text-foreground">
+          Preferences
+        </h3>
+
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-medium text-foreground">Auto-retry on failure</p>
+            <p className="font-medium text-foreground">
+              Auto-retry on failure
+            </p>
             <p className="text-sm text-muted-foreground">
               Automatically retry failed connections up to 3 times
             </p>
           </div>
           <Switch
             checked={settings.autoRetry}
-            onCheckedChange={(checked) => updateSetting('autoRetry', checked)}
+            onCheckedChange={(checked) =>
+              updateSetting('autoRetry', checked)
+            }
           />
         </div>
 

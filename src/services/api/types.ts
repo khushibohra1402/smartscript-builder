@@ -165,16 +165,27 @@ export interface StepUpdateMessage {
 // System
 export interface HealthResponse {
   status: string;
-  version: string;
-  ollama_status: string;
-  database_status: string;
+  timestamp?: string;
+  version?: string;
+  ollama_status?: string;
+  database_status?: string;
 }
 
 export interface OllamaStatus {
-  is_available: boolean;
-  host: string;
-  models: string[];
-  active_model: string;
+  // Supports backend's actual response shape
+  app?: Record<string, unknown>;
+  ollama?: {
+    healthy: boolean;
+    host: string;
+    configured_model: string;
+    available_models: string[];
+  };
+  // Legacy fields for compatibility
+  is_available?: boolean;
+  host?: string;
+  models?: string[];
+  active_model?: string;
+  timestamp?: string;
 }
 
 // Error

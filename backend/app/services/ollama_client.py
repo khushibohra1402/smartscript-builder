@@ -19,7 +19,7 @@ class OllamaClient:
     def __init__(self):
         self.base_url = settings.OLLAMA_HOST
         self.model = settings.OLLAMA_MODEL
-        self.timeout = settings.OLLAMA_TIMEOUT
+        self.timeout = 300.0  # 300s for generation requests
     
     async def check_health(self) -> bool:
         """Check if Ollama server is running."""
@@ -101,9 +101,18 @@ class OllamaClient:
                     logger.error(f"Ollama error: {response.status_code} - {response.text}")
                     raise Exception(f"Ollama generation failed: {response.status_code}")
         
+        except httpx.ReadTimeout:
+            logger.error(
+                f"Ollama generation timed out (limit: {self.timeout}s). "
+                "Check if the model is too large for the current hardware."
+            )
+            raise TimeoutError(f"Ollama generation timed out after {self.timeout}s")
         except httpx.TimeoutException:
-            logger.error(f"Ollama request timed out after {self.timeout}s")
-            raise Exception("LLM generation timed out")
+            logger.error(
+                f"Ollama connection timed out (limit: {self.timeout}s). "
+                "Check if the model is too large for the current hardware."
+            )
+            raise TimeoutError(f"Ollama generation timed out after {self.timeout}s")
         except Exception as e:
             logger.error(f"Ollama generation error: {e}")
             raise

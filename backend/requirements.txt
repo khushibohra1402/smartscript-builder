@@ -12,13 +12,13 @@ sqlalchemy==2.0.25
 aiosqlite==0.19.0
 
 # RAG Engine
-faiss-cpu==1.7.4
+faiss-cpu==1.13.2
 sentence-transformers==2.3.1
 numpy==1.26.3
 
 # Ollama Client
 ollama==0.1.6
-httpx==0.26.0
+httpx==0.25.2
 
 # Automation
 playwright==1.41.0
@@ -38,4 +38,3 @@ aiofiles==23.2.1
 # Testing
 pytest==7.4.4
 pytest-asyncio==0.23.3
-httpx==0.26.0

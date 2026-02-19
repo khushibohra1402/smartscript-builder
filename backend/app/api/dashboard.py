@@ -1,26 +1,26 @@
- """
+"""
  Dashboard API Router
  Aggregated statistics for the dashboard.
- """
+"""
  
- from fastapi import APIRouter, Depends
- from sqlalchemy.ext.asyncio import AsyncSession
- from sqlalchemy import select, func
- from datetime import datetime, timedelta
- from typing import Optional
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from datetime import datetime, timedelta
+from typing import Optional
  
- from app.models.database import (
+from app.models.database import (
      Execution,
      ExecutionStatus as DBExecutionStatus,
      get_session
  )
- from pydantic import BaseModel
+from pydantic import BaseModel
  
  
- router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
  
  
- class DashboardStats(BaseModel):
+class DashboardStats(BaseModel):
      """Dashboard statistics response."""
      total_executions: int
      pass_rate: float
@@ -33,8 +33,8 @@
      duration_trend: float
  
  
- @router.get("/stats", response_model=DashboardStats)
- async def get_dashboard_stats(
+@router.get("/stats", response_model=DashboardStats)
+async def get_dashboard_stats(
      days: int = 30,
      session: AsyncSession = Depends(get_session)
  ):
@@ -71,7 +71,7 @@
      )
  
  
- async def _get_period_stats(
+async def _get_period_stats(
      session: AsyncSession,
      start: datetime,
      end: datetime
@@ -129,7 +129,7 @@
      }
  
  
- def _calculate_trend(current: float, previous: float) -> float:
+def _calculate_trend(current: float, previous: float) -> float:
      """Calculate percentage change between periods."""
      if previous == 0:
          return 100 if current > 0 else 0

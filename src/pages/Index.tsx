@@ -8,7 +8,6 @@ import { HistoryView } from '@/components/views/HistoryView';
 import { ProjectsView } from '@/components/views/ProjectsView';
 import { DevicesView } from '@/components/views/DevicesView';
 import { SettingsView } from '@/components/views/SettingsView';
-import { ArchitectureView } from '@/components/views/ArchitectureView';
 import { ResultsViewer } from '@/components/results/ResultsViewer';
 import { ExecutionResult } from '@/types/automation';
 
@@ -95,8 +94,6 @@ export default function Index({ initialView }: IndexProps) {
         return <DevicesView />;
       case 'settings':
         return <SettingsView />;
-      case 'architecture':
-        return <ArchitectureView />;
       default:
         return <DashboardView onViewResult={handleViewResult} />;
     }

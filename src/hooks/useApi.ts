@@ -38,8 +38,11 @@ export function useHealth() {
   return useQuery({
     queryKey: queryKeys.health,
     queryFn: () => apiClient.getHealth(),
-    refetchInterval: 30000, // Check every 30s
-    retry: 1,
+    refetchInterval: 30000,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -48,12 +51,12 @@ export function useOllamaStatus() {
     queryKey: queryKeys.ollamaStatus,
     queryFn: () => apiClient.getOllamaStatus(),
     refetchInterval: 60000,
-    retry: 1,
-    // The /system/status endpoint returns a broader object; 
-    // we just need a successful response to know the backend is reachable
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnWindowFocus: true,
   });
 }
-
 // ============================================================================
 // Project Hooks
 // ============================================================================

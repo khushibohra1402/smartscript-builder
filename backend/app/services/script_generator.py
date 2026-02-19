@@ -77,6 +77,19 @@ class ScriptGenerator:
             # Extract code from response
             script_code = code_guardrail.extract_code_from_response(response)
             
+        except TimeoutError as e:
+            logger.error(f"Ollama generation timed out: {e}")
+            return ScriptGenerationResponse(
+                script_code="",
+                is_valid=False,
+                validation_errors=[
+                    "LLM generation timed out (504). "
+                    "The model may be too large for current hardware or the prompt too complex."
+                ],
+                rag_context_used=context_names,
+                generation_time_ms=(time.time() - start_time) * 1000,
+                status_code=504
+            )
         except Exception as e:
             logger.error(f"Ollama generation failed: {e}")
             return ScriptGenerationResponse(

@@ -17,20 +17,6 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 
-const mockSteps: TestStep[] = [
-  { id: 's1', action: 'Navigate to youtube.com', result: true, latency: 850, error: null, timestamp: '00:00.85' },
-  { id: 's2', action: 'Click Sign In button', result: true, latency: 120, error: null, timestamp: '00:01.00' },
-  { id: 's3', action: 'Enter email address', result: true, latency: 340, error: null, timestamp: '00:01.35' },
-  { id: 's4', action: 'Click Next button', result: true, latency: 95, error: null, timestamp: '00:01.45' },
-  { id: 's5', action: 'Enter password', result: true, latency: 280, error: null, timestamp: '00:01.75' },
-  { id: 's6', action: 'Click Sign In', result: true, latency: 1200, error: null, timestamp: '00:02.95' },
-  { id: 's7', action: 'Wait for home page', result: true, latency: 2100, error: null, timestamp: '00:05.05' },
-  { id: 's8', action: 'Click search bar', result: true, latency: 80, error: null, timestamp: '00:05.15' },
-  { id: 's9', action: 'Type "React tutorials"', result: true, latency: 450, error: null, timestamp: '00:05.60' },
-  { id: 's10', action: 'Press Enter', result: true, latency: 65, error: null, timestamp: '00:05.70' },
-  { id: 's11', action: 'Wait for search results', result: true, latency: 1800, error: null, timestamp: '00:07.50' },
-  { id: 's12', action: 'Click first video', result: true, latency: 150, error: null, timestamp: '00:07.65' },
-];
 
 const statusConfig: Record<ExecutionStatus, { 
   icon: React.ReactNode; 

@@ -70,7 +70,7 @@ interface ResultsViewerProps {
 export function ResultsViewer({ result, onBack }: ResultsViewerProps) {
   const [expandedSteps, setExpandedSteps] = useState(true);
   const status = statusConfig[result.status];
-  const stepsWithDetails = mockSteps;
+  const stepsWithDetails = result.steps;
 
   return (
     <div className="space-y-6 animate-slide-up">

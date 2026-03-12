@@ -82,6 +82,19 @@ class ExecutionService:
         # Get appropriate adapter
         adapter = get_adapter(device_type)
         
+        # Ensure platform is the enum type, not a raw string
+        if isinstance(platform, str):
+            try:
+                from app.models.schemas import Platform as PlatformEnum
+                platform = PlatformEnum(platform)
+            except ValueError:
+                return self._create_error_result(
+                    execution_id=execution_id,
+                    test_name=test_name,
+                    project_name=project_name,
+                    error=f"Unsupported platform: {platform}"
+                )
+        
         try:
             # Setup automation
             setup_success = await adapter.setup({

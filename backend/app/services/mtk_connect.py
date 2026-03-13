@@ -38,7 +38,7 @@ class MTKConnectService:
             return await self._validate_mobile_device(request.platform, request.device_id)
     
     async def _validate_web_browser(self, platform: Platform) -> DeviceValidationResponse:
-        """Check if the specified browser is available."""
+        """Check if the specified browser is available (system install or Playwright managed)."""
         browser_paths = {
             Platform.CHROME: [
                 "/usr/bin/google-chrome",
@@ -59,7 +59,7 @@ class MTKConnectService:
         
         paths = browser_paths.get(platform, [])
         
-        # Check if any path exists
+        # Check if any system path exists
         import os
         for path in paths:
             if os.path.exists(path):
@@ -92,13 +92,48 @@ class MTKConnectService:
         except Exception as e:
             logger.debug(f"Browser lookup failed: {e}")
         
+        # Check Playwright managed browsers as fallback
+        playwright_ok = await self._check_playwright_browser(platform)
+        if playwright_ok:
+            return DeviceValidationResponse(
+                is_valid=True,
+                device_type=DeviceType.WEB,
+                platform=platform,
+                message=f"{platform.value.title()} available via Playwright",
+                details={"source": "playwright-managed"}
+            )
+        
         return DeviceValidationResponse(
             is_valid=False,
             device_type=DeviceType.WEB,
             platform=platform,
-            message=f"{platform.value.title()} browser not found",
+            message=f"{platform.value.title()} browser not found. Run 'playwright install' to install managed browsers.",
             details={"searched_paths": paths}
         )
+    
+    async def _check_playwright_browser(self, platform: Platform) -> bool:
+        """Check if Playwright has the browser installed in its managed cache."""
+        browser_map = {
+            Platform.CHROME: "chromium",
+            Platform.FIREFOX: "firefox",
+            Platform.SAFARI: "webkit",
+        }
+        browser_name = browser_map.get(platform)
+        if not browser_name:
+            return False
+        
+        try:
+            result = await asyncio.create_subprocess_exec(
+                "python", "-c",
+                f"from playwright.sync_api import sync_playwright; p = sync_playwright().start(); b = p.{browser_name}.launch(headless=True); b.close(); p.stop(); print('ok')",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await asyncio.wait_for(result.communicate(), timeout=15)
+            return result.returncode == 0 and b"ok" in stdout
+        except Exception as e:
+            logger.debug(f"Playwright browser check failed for {browser_name}: {e}")
+            return False
     
     async def _validate_mobile_device(
         self, 

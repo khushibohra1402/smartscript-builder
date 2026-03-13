@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Sparkles, Play, Loader2, Code } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Sparkles, Play, Loader2, Code, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,7 @@ interface DescriptionInputProps {
   onExecute: () => void;
   isGenerating: boolean;
   generatedCode: string | null;
+  onCodeChange?: (code: string) => void;
 }
 
 export function DescriptionInput({
@@ -22,8 +23,16 @@ export function DescriptionInput({
   onExecute,
   isGenerating,
   generatedCode,
+  onCodeChange,
 }: DescriptionInputProps) {
   const [showCode, setShowCode] = useState(false);
+
+  // Auto-show the code editor when a script is generated
+  useEffect(() => {
+    if (generatedCode) {
+      setShowCode(true);
+    }
+  }, [generatedCode]);
 
   const examplePrompts = [
     "Login to YouTube with Google account, search for 'React tutorials', and play the first video",
@@ -48,8 +57,11 @@ export function DescriptionInput({
             onClick={() => setShowCode(!showCode)}
             className="text-muted-foreground"
           >
-            <Code className="w-4 h-4 mr-1" />
-            {showCode ? 'Hide Code' : 'View Code'}
+            {showCode ? (
+              <><EyeOff className="w-4 h-4 mr-1" /> Hide Code</>
+            ) : (
+              <><Code className="w-4 h-4 mr-1" /> View Code</>
+            )}
           </Button>
         )}
       </div>
@@ -83,16 +95,19 @@ export function DescriptionInput({
         </div>
       </div>
 
-      {showCode && generatedCode && (
-        <div className="relative">
-          <pre className="p-4 rounded-lg bg-muted border border-border overflow-x-auto scrollbar-thin">
-            <code className="text-sm font-mono text-primary">
-              {generatedCode}
-            </code>
-          </pre>
-          <div className="absolute top-2 right-2 text-xs text-muted-foreground bg-background/80 px-2 py-1 rounded">
-            Generated Python
+      {/* Editable Script Editor */}
+      {showCode && generatedCode !== null && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">Generated Script (editable)</span>
+            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Python</span>
           </div>
+          <Textarea
+            value={generatedCode}
+            onChange={(e) => onCodeChange?.(e.target.value)}
+            className="min-h-[240px] bg-muted border-border font-mono text-sm text-foreground resize-y"
+            spellCheck={false}
+          />
         </div>
       )}
 

@@ -56,7 +56,8 @@ class OllamaClient:
         model: Optional[str] = None,
         system: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        num_ctx: Optional[int] = None
     ) -> str:
         """
         Generate a response from Ollama (non-streaming).

@@ -56,7 +56,8 @@ class OllamaClient:
         model: Optional[str] = None,
         system: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 4096
+        max_tokens: int = 4096,
+        num_ctx: Optional[int] = None
     ) -> str:
         """
         Generate a response from Ollama (non-streaming).
@@ -73,14 +74,18 @@ class OllamaClient:
         """
         model = model or self.model
         
+        options = {
+            "temperature": temperature,
+            "num_predict": max_tokens
+        }
+        if num_ctx:
+            options["num_ctx"] = num_ctx
+
         payload = {
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
+            "options": options
         }
         
         if system:

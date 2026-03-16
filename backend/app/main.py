@@ -18,7 +18,7 @@ from app.api.devices import router as devices_router
 from app.api.scripts import router as scripts_router
 from app.api.executions import router as executions_router
 from app.api.system import router as system_router
- from app.api.dashboard import router as dashboard_router
+from app.api.dashboard import router as dashboard_router
 
 
 # Configure logging

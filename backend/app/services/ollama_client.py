@@ -74,14 +74,18 @@ class OllamaClient:
         """
         model = model or self.model
         
+        options = {
+            "temperature": temperature,
+            "num_predict": max_tokens
+        }
+        if num_ctx:
+            options["num_ctx"] = num_ctx
+
         payload = {
             "model": model,
             "prompt": prompt,
             "stream": False,
-            "options": {
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
+            "options": options
         }
         
         if system:

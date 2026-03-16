@@ -76,7 +76,7 @@ app.include_router(projects_router)
 app.include_router(devices_router)
 app.include_router(scripts_router)
 app.include_router(executions_router)
- app.include_router(dashboard_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")

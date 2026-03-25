@@ -2,17 +2,51 @@
 
 **Audience:** New engineers joining the team  
 **Author:** Lead Software Architect  
-**Version:** 1.1 | Last Updated: March 2026
+**Version:** 2.0 | Last Updated: March 2026
 
 ---
 
-## 1. The Vision & High-Level Architecture
+## Table of Contents
 
-Welcome to the team! You're joining a project that sits at the intersection of **AI/ML engineering** and **test automation infrastructure**. Here's the big picture.
+1. [Welcome & Project Overview](#1-welcome--project-overview)
+2. [High-Level Architecture](#2-high-level-architecture)
+3. [Project Structure & File Map](#3-project-structure--file-map)
+4. [Backend Deep Dive (FastAPI/Python)](#4-backend-deep-dive-fastapipython)
+5. [Frontend Deep Dive (React/TypeScript)](#5-frontend-deep-dive-reacttypescript)
+6. [The RAG Pipeline & AI Engine](#6-the-rag-pipeline--ai-engine)
+7. [Script Generation → Edit → Execution Flow](#7-script-generation--edit--execution-flow)
+8. [Automation Adapters & Device Management](#8-automation-adapters--device-management)
+9. [Real-Time Communication (WebSockets)](#9-real-time-communication-websockets)
+10. [Resilience, Timeouts & Error Handling](#10-resilience-timeouts--error-handling)
+11. [Security & Code Guardrails](#11-security--code-guardrails)
+12. [Local Development Setup](#12-local-development-setup)
+13. [Common Debugging Scenarios](#13-common-debugging-scenarios)
+14. [Contributing Guidelines](#14-contributing-guidelines)
+15. [Glossary](#15-glossary)
 
-### What We Built
+---
 
-An **offline-first, AI-driven test automation platform** that lets QA engineers describe what they want to test *in plain English*, and the system generates executable test scripts automatically — using our own proprietary libraries as context.
+## 1. Welcome & Project Overview
+
+Welcome to the team! You're joining a project at the intersection of **AI/ML engineering** and **test automation infrastructure**.
+
+### What This Platform Does
+
+An **offline-first, AI-driven test automation platform** that lets QA engineers describe what they want to test *in plain English*, and the system generates executable test scripts automatically — using proprietary enterprise libraries as context.
+
+### Key Design Principles
+
+| Principle | Description |
+|-----------|-------------|
+| **Local-First** | Everything runs on the user's machine. No cloud dependencies. No data leaves the network. |
+| **AI-Augmented, Not AI-Replaced** | The LLM generates scripts, but engineers review, edit, and approve before execution. |
+| **Library-Aware Generation** | RAG ensures generated scripts use real enterprise APIs, not hallucinated ones. |
+| **Safety by Default** | A code guardrail blocks dangerous imports and patterns before any script runs. |
+| **Project Isolation** | Each project has its own library index, test cases, and execution history. |
+
+---
+
+## 2. High-Level Architecture
 
 ### The Three-Tier Stack
 
@@ -20,58 +54,142 @@ An **offline-first, AI-driven test automation platform** that lets QA engineers 
 ┌─────────────────────────────────────────────────────┐
 │              React 18 / TypeScript Frontend          │
 │         (Vite + shadcn/ui + Tailwind CSS)            │
+│                                                      │
+│  Dashboard │ Script Generator │ Executor │ History    │
 ├─────────────────────────────────────────────────────┤
 │              FastAPI / Python Backend                 │
-│    (RAG Engine + Ollama Client + Code Guardrails)     │
+│                                                      │
+│  REST API ─── RAG Engine ─── Ollama Client           │
+│  Execution Service ─── Automation Adapters           │
+│  Code Guardrails ─── Device Bridge                   │
 ├─────────────────────────────────────────────────────┤
 │           Local Infrastructure Layer                  │
-│   (SQLite · FAISS Vector DB · Ollama LLM · ADB/USB)  │
+│                                                      │
+│  SQLite DB · FAISS Vector Index · Ollama LLM (7B)    │
+│  Playwright · Appium · ADB/USB Device Bridge         │
 └─────────────────────────────────────────────────────┘
 ```
 
-- **Frontend (React/TypeScript):** A single-page application providing the dashboard, script generation UI, execution history, device management, and real-time WebSocket updates. It communicates with the backend exclusively through typed HTTP endpoints.
+### Data Flow Overview
 
-- **Backend (FastAPI/Python):** The orchestration brain. It hosts the REST API, manages projects and test cases in SQLite, runs the RAG pipeline for context retrieval, interfaces with Ollama for LLM inference, and enforces code safety through static analysis guardrails.
-
-- **Ollama LLM with RAG:** This is what makes the platform *intelligent*. Instead of sending a bare prompt to the LLM, we first **retrieve relevant method signatures and docstrings** from our indexed enterprise libraries (using FAISS vector search), then inject that context into a carefully constructed "Mega-Prompt." This ensures the generated scripts actually use our real APIs — not hallucinated ones.
-
-> **Key Design Principle:** Everything runs locally. No cloud dependencies. No data leaves the machine. This is critical for enterprise environments with strict data governance.
+```
+User (Plain English) → Frontend → FastAPI → RAG Search → Prompt Build → Ollama LLM
+                                                                          │
+                                                                          ▼
+User ← Frontend ← FastAPI ← Code Guardrail Validation ← Generated Script
+```
 
 ---
 
-## 2. The Backend Engine (FastAPI)
+## 3. Project Structure & File Map
 
-The backend lives in `backend/app/` and is organized as follows:
+### Backend (`backend/`)
 
 ```
-backend/app/
-├── main.py                  # FastAPI app, CORS, lifespan events
-├── config.py                # Pydantic Settings (env vars, paths, security)
-├── api/                     # Route handlers (projects, devices, scripts, executions, dashboard)
-├── models/
-│   ├── database.py          # SQLAlchemy models + SQLite connection
-│   └── schemas.py           # Pydantic request/response schemas
-└── services/
-    ├── rag_engine.py         # FAISS indexing, embedding, prompt building, code guardrail
-    ├── ollama_client.py      # HTTP client for local Ollama server
-    ├── script_generator.py   # Orchestrator: RAG → Ollama → Guardrail
-    ├── execution_service.py  # Test runner (Playwright/Appium)
-    ├── automation_adapters.py# Adapter pattern for web vs. mobile
-    └── mtk_connect.py        # Device bridge (ADB)
+backend/
+├── app/
+│   ├── main.py                     # FastAPI app entry, CORS, lifespan events
+│   ├── config.py                   # Pydantic Settings — env vars, paths, security rules
+│   ├── api/                        # REST route handlers
+│   │   ├── projects.py             #   CRUD for projects
+│   │   ├── devices.py              #   Device validation & status
+│   │   ├── scripts.py              #   Script generation & saving
+│   │   ├── executions.py           #   Test execution triggers & history
+│   │   ├── dashboard.py            #   Dashboard aggregation stats
+│   │   └── system.py               #   Health checks & system status
+│   ├── models/
+│   │   ├── database.py             #   SQLAlchemy ORM models + SQLite init
+│   │   └── schemas.py              #   Pydantic request/response schemas
+│   └── services/
+│       ├── rag_engine.py           #   FAISS indexing, embedding, prompt building
+│       ├── script_generator.py     #   Orchestrator: RAG → Ollama → Guardrail
+│       ├── ollama_client.py        #   HTTP client for local Ollama server
+│       ├── execution_service.py    #   Test runner orchestration
+│       ├── automation_adapters.py  #   Adapter pattern: Playwright & Appium
+│       └── mtk_connect.py          #   Device bridge (ADB, browser detection)
+├── examples/
+│   └── enterprise_lib/             #   Sample enterprise library for RAG demo
+│       ├── web.py                  #     Browser, Actions, GoogleOAuth classes
+│       └── mobile.py              #     MobileDevice, TouchActions classes
+├── requirements.txt                #   Python dependencies
+└── .env.example                    #   Environment config template
 ```
 
-### 2.1 The API Client Layer — Typed Endpoints & Pydantic Validation
+### Frontend (`src/`)
 
-Every request and response flowing through FastAPI is validated by **Pydantic models** defined in `backend/app/models/schemas.py`.
+```
+src/
+├── App.tsx                         # Root component with routing
+├── pages/
+│   ├── Index.tsx                   # Main page (renders current view)
+│   └── NotFound.tsx                # 404 page
+├── components/
+│   ├── layout/                     # Shell components
+│   │   ├── Header.tsx              #   Top bar with notifications & profile
+│   │   ├── Sidebar.tsx             #   Navigation sidebar
+│   │   ├── ConnectionStatusOverlay.tsx  #  Backend connection monitor
+│   │   ├── NotificationDropdown.tsx     #  Notification panel
+│   │   └── ProfileDropdown.tsx          #  User profile menu
+│   ├── views/                      # Page-level views
+│   │   ├── DashboardView.tsx       #   System overview & stats
+│   │   ├── ExecuteView.tsx         #   Script generation + execution control
+│   │   ├── HistoryView.tsx         #   Past execution results
+│   │   ├── DevicesView.tsx         #   Connected device management
+│   │   ├── ProjectsView.tsx        #   Project CRUD
+│   │   ├── SettingsView.tsx        #   App configuration
+│   │   └── ArchitectureView.tsx    #   Interactive architecture docs
+│   ├── execute/                    # Script generation sub-components
+│   │   ├── ConfigurationPanel.tsx  #   Project, device, platform selectors
+│   │   └── DescriptionInput.tsx    #   NL input + code editor + action buttons
+│   ├── dashboard/                  # Dashboard widgets
+│   │   ├── StatsCard.tsx           #   Metric display card
+│   │   ├── DeviceStatus.tsx        #   Device health indicator
+│   │   └── RecentExecutions.tsx    #   Latest test runs list
+│   ├── results/
+│   │   └── ResultsViewer.tsx       #   Execution results display
+│   ├── architecture/               # Docs components
+│   │   ├── MermaidDiagram.tsx      #   Mermaid chart renderer
+│   │   └── CodeBlock.tsx           #   Syntax-highlighted code block
+│   └── ui/                         # shadcn/ui primitives (40+ components)
+├── services/api/
+│   ├── config.ts                   # Backend URL, timeouts, endpoint map
+│   ├── client.ts                   # Typed ApiClient singleton with retries
+│   ├── types.ts                    # TypeScript mirrors of Pydantic schemas
+│   ├── websocket.ts                # WebSocket client for real-time updates
+│   └── index.ts                    # Barrel export
+├── hooks/
+│   ├── useApi.ts                   # React Query wrappers for all API calls
+│   ├── useExecutionWebSocket.ts    # WebSocket hook for execution streaming
+│   └── use-toast.ts                # Toast notification hook
+└── types/
+    └── automation.ts               # Shared domain types
+```
 
-- **Request validation:** When a `POST /scripts/generate` request arrives, FastAPI automatically deserializes the JSON body into a `ScriptGenerationRequest` Pydantic model. If any field is missing or has the wrong type, FastAPI returns a `422 Unprocessable Entity` *before our code even runs*. Zero manual validation needed.
+---
 
-- **Response serialization:** Return values are typed as `ScriptGenerationResponse`, ensuring the frontend always receives a predictable shape. This creates a **contract** between frontend and backend.
+## 4. Backend Deep Dive (FastAPI/Python)
 
-- **Enums for safety:** Fields like `device_type`, `platform`, and `test_type` use Python `Enum` classes, so invalid values (e.g., `"blackberry"`) are rejected at the schema level.
+### 4.1 Application Startup (`main.py`)
+
+The app uses FastAPI's `lifespan` context manager:
 
 ```python
-# Example: The request model guarantees these fields exist and are valid
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: create directories, initialize SQLite
+    ensure_directories()
+    await init_database()
+    yield
+    # Shutdown: cleanup
+```
+
+**CORS** is configured with `allow_origins=["*"]` for development. This permits the Lovable cloud preview and local dev servers to reach the backend.
+
+### 4.2 API Layer — Typed Endpoints & Pydantic Validation
+
+Every request/response is validated by **Pydantic models** in `models/schemas.py`:
+
+```python
 class ScriptGenerationRequest(BaseModel):
     project_id: str
     description: str
@@ -80,262 +198,409 @@ class ScriptGenerationRequest(BaseModel):
     test_type: TestType        # Enum: 'functional' | 'regression' | ...
 ```
 
-> **Why this matters:** The frontend mirrors these types in `src/services/api/types.ts`. When you change a backend schema, you update the frontend type — and TypeScript catches every mismatched call site at compile time.
+**Why this matters:** The frontend mirrors these in `src/services/api/types.ts`. When you change a backend schema, update the frontend type — TypeScript catches every mismatch at compile time.
 
-### 2.2 Resilience Logic — Exponential Backoff & Retries
+### 4.3 API Endpoints Reference
 
-The system is designed to handle the reality that local services (Ollama, ADB devices) are not always immediately responsive.
+| Method | Endpoint | Handler | Purpose |
+|--------|----------|---------|---------|
+| `GET` | `/system/health` | `system.py` | Health check — returns OK if backend is running |
+| `GET` | `/system/status` | `system.py` | Detailed status including Ollama connectivity |
+| `GET/POST` | `/projects/` | `projects.py` | List / create projects |
+| `POST` | `/devices/validate` | `devices.py` | Validate device connection (real checks) |
+| `POST` | `/scripts/generate` | `scripts.py` | Generate script via RAG + Ollama pipeline |
+| `POST` | `/scripts/save` | `scripts.py` | Save/update a test case with script code |
+| `POST` | `/executions/run` | `executions.py` | Execute a saved test case |
+| `GET` | `/executions/history` | `executions.py` | Retrieve past execution results |
+| `GET` | `/dashboard/stats` | `dashboard.py` | Aggregated metrics for dashboard view |
 
-- **Frontend retry config** (`src/services/api/config.ts`):
-  ```typescript
-  RETRY_ATTEMPTS: 3,
-  RETRY_DELAY: 1000,  // Base delay in ms
-  ```
+### 4.4 Service Layer Architecture
 
-- **Connection Status Overlay** uses exponential backoff when polling health endpoints:
-  - First retry: ~1 second
-  - Second retry: ~2 seconds
-  - Third retry: ~4 seconds
-  - This prevents flooding a struggling service with requests while still recovering quickly once it's back.
+```
+scripts.py (API route)
+    └── script_generator.py (Orchestrator)
+            ├── rag_engine.py → LibraryIndexer (FAISS indexing + search)
+            ├── rag_engine.py → PromptBuilder (mega-prompt construction)
+            ├── ollama_client.py (LLM inference)
+            └── rag_engine.py → CodeGuardrail (AST validation)
 
-- **Backend-side:** The Ollama client (`ollama_client.py`) wraps `httpx` with explicit timeout handling. If Ollama is loading a model into VRAM, the first request may take 30+ seconds — the client accounts for this gracefully rather than failing immediately.
+executions.py (API route)
+    └── execution_service.py (Orchestrator)
+            ├── automation_adapters.py → PlaywrightAdapter (web tests)
+            ├── automation_adapters.py → AppiumAdapter (mobile tests)
+            └── mtk_connect.py (device bridge / browser detection)
+```
 
-### 2.3 Timeouts — The 30s vs. 310s Split
+### 4.5 Configuration (`config.py`)
 
-This is a deliberate architectural decision, not an accident:
+All settings are managed through **Pydantic Settings** with `.env` file support:
 
-| Request Type | Timeout | Rationale |
-|---|---|---|
-| Standard API calls | **30 seconds** | Health checks, CRUD operations, device validation — these should be near-instant. If they take 30s, something is genuinely broken. |
-| LLM inference (`/scripts/generate`) | **310 seconds** | Ollama running a 7B-parameter model on consumer hardware can legitimately take 2–5 minutes. The backend allows 300s; the frontend allows 310s to account for network overhead. |
+| Setting | Default | Purpose |
+|---------|---------|---------|
+| `OLLAMA_HOST` | `http://localhost:11434` | Local LLM server URL |
+| `OLLAMA_MODEL` | `mistral:7b` | Model used for code generation |
+| `OLLAMA_TIMEOUT` | `120` | Base timeout (extended for generation) |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence transformer for RAG embeddings |
+| `FAISS_INDEX_PATH` | `./data/faiss_index` | Vector index storage directory |
+| `DATABASE_PATH` | `./data/automation.db` | SQLite database file |
+| `FORBIDDEN_IMPORTS` | `os, subprocess, sys...` | Blocked imports in generated code |
+| `MAX_SCRIPT_SIZE` | `50KB` | Maximum allowed generated script size |
+
+---
+
+## 5. Frontend Deep Dive (React/TypeScript)
+
+### 5.1 Tech Stack
+
+| Technology | Role |
+|------------|------|
+| **React 18** | UI framework with hooks-based state management |
+| **TypeScript** | Type safety — mirrors backend Pydantic schemas |
+| **Vite** | Build tool and dev server |
+| **Tailwind CSS** | Utility-first styling with design tokens |
+| **shadcn/ui** | 40+ accessible UI primitives (buttons, dialogs, tabs, etc.) |
+| **React Query** (`@tanstack/react-query`) | Server state management, caching, retries |
+| **React Router** | Client-side navigation |
+| **Recharts** | Dashboard charts and metrics visualization |
+| **Mermaid** | Architecture diagram rendering |
+
+### 5.2 API Client (`services/api/client.ts`)
+
+A singleton `ApiClient` class handles all backend communication:
 
 ```typescript
-// src/services/api/config.ts
-TIMEOUT: 30000,        // 30s — standard requests
-LLM_TIMEOUT: 310000,   // 310s — LLM generation only
+// Typed method — mirrors Pydantic schema exactly
+async generateScript(data: ScriptGenerationRequest): Promise<ScriptGenerationResponse> {
+  return this.post<ScriptGenerationResponse>(
+    API_ENDPOINTS.SCRIPT_GENERATE,  // → '/scripts/generate'
+    data,
+    API_CONFIG.LLM_TIMEOUT          // → 310,000ms
+  );
+}
 ```
 
-```python
-# backend/app/config.py
-OLLAMA_TIMEOUT: int = 120  # Base timeout, extended per-request for generation
+**Key features:**
+- Exponential backoff on retries (1s → 2s → 4s)
+- Dynamic base URL (supports runtime switching via Connection Overlay)
+- Two timeout tiers: 30s standard, 310s for LLM calls
+
+### 5.3 React Hooks (`hooks/useApi.ts`)
+
+All API calls are wrapped in **React Query mutations/queries**:
+
+```typescript
+export const useGenerateScript = () => useMutation({
+  mutationFn: (data: ScriptGenerationRequest) => apiClient.generateScript(data),
+});
 ```
 
-> **Mental model:** Think of it like a restaurant. Ordering takes 30 seconds. But if you order a slow-cooked dish, you wait longer — and you don't cancel the order after 30 seconds just because the food isn't ready yet.
+This gives you: loading states, error handling, caching, automatic retries — all for free.
+
+### 5.4 Connection Status Overlay
+
+**The Problem:** When the frontend is served from HTTPS (e.g., cloud preview), browsers silently block HTTP requests to `localhost` (mixed-content blocking).
+
+**The Solution** (`ConnectionStatusOverlay.tsx`):
+1. Detects if `window.location.protocol === 'https:'` while backend URL starts with `http://`
+2. Shows an input to enter an HTTPS tunnel URL (ngrok, Cloudflare Tunnel)
+3. Persists to `localStorage` — the `ApiClient` reads it dynamically on every request
+
+**For local development:** Run both at `http://` to avoid this entirely.
+
+### 5.5 Design System
+
+The UI uses **semantic design tokens** defined in `src/index.css` and `tailwind.config.ts`:
+
+```css
+:root {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --primary: 217.2 91.2% 59.8%;
+  /* ... */
+}
+```
+
+**Rule:** Never use raw color values in components. Always use tokens like `bg-background`, `text-primary`, `border-muted`.
 
 ---
 
-## 3. The Frontend & Bridge (React/TypeScript)
+## 6. The RAG Pipeline & AI Engine
 
-The frontend lives in `src/` and follows a clean component architecture:
+### Why RAG Instead of Fine-Tuning?
 
-```
-src/
-├── services/api/
-│   ├── config.ts        # Dynamic backend URL, timeouts, endpoint map
-│   ├── client.ts        # Typed ApiClient class (singleton)
-│   ├── types.ts         # TypeScript mirrors of Pydantic schemas
-│   └── websocket.ts     # Real-time execution updates
-├── components/
-│   ├── layout/          # Sidebar, Header, ConnectionStatusOverlay
-│   ├── views/           # Page-level components (Dashboard, Execute, History...)
-│   ├── execute/         # Script generation UI (ConfigPanel, DescriptionInput)
-│   └── ui/              # shadcn/ui primitives
-├── hooks/
-│   ├── useApi.ts        # React Query wrappers for API calls
-│   └── useExecutionWebSocket.ts
-└── types/automation.ts  # Shared domain types
-```
+If you tell an LLM *"Write a Selenium test to login"*, it generates generic Selenium code. But **our enterprise apps use proprietary libraries** with custom methods like `MobileDriver.tap_element()` or `WebPortal.navigate_to_module()`. The LLM has never seen these APIs during training.
 
-### 3.1 Connection Status Overlay — Mixed Content Detection
+**RAG** bridges this gap without the cost and complexity of fine-tuning.
 
-This is one of our more elegant pieces of infrastructure. Here's the problem it solves:
-
-**The Problem:** When the frontend is served from an HTTPS domain (e.g., Lovable's cloud preview at `https://*.lovable.app`), browsers **silently block** all requests to `http://localhost:8000`. No error. No log. The request just hangs as "Pending" forever. This is called **mixed-content blocking**.
-
-**Our Solution** (`src/components/layout/ConnectionStatusOverlay.tsx`):
-
-1. **Detection:** On mount, the overlay calls `isMixedContentBlocked()` which checks:
-   ```typescript
-   const isHttps = window.location.protocol === 'https:';
-   const backendIsHttp = getBackendUrl().startsWith('http://');
-   return isHttps && backendIsHttp;
-   ```
-
-2. **Runtime URL switching:** If mixed content is detected, the overlay presents an input field where users can enter an HTTPS tunnel URL (e.g., from `ngrok` or Cloudflare Tunnel). This URL is persisted to `localStorage` and takes effect immediately — no page reload required.
-
-3. **Dynamic base URL:** The `ApiClient` reads the backend URL through a getter, not a constructor value:
-   ```typescript
-   private get baseUrl(): string {
-     return API_CONFIG.BASE_URL;  // Reads from localStorage every time
-   }
-   ```
-
-> **For local development:** Just run the frontend at `http://localhost:5173` and the backend at `http://localhost:8000`. Same protocol = no mixed-content issues.
-
-### 3.2 Frontend → Backend Communication for Script Generation
-
-When a user clicks **"Generate Script"**, here's the exact code path:
-
-1. **`ExecuteView.tsx`** collects the form state (`TestConfiguration`) and calls the API hook.
-
-2. **`useApi.ts`** wraps `apiClient.generateScript()` with React Query for caching, loading states, and error handling.
-
-3. **`client.ts`** sends a typed `POST` request:
-   ```typescript
-   async generateScript(data: ScriptGenerationRequest): Promise<ScriptGenerationResponse> {
-     return this.post<ScriptGenerationResponse>(
-       API_ENDPOINTS.SCRIPT_GENERATE,  // → '/scripts/generate'
-       data,
-       API_CONFIG.LLM_TIMEOUT          // → 310,000ms
-     );
-   }
-   ```
-
-4. **FastAPI** receives the request, validates via Pydantic, and hands it to `ScriptGenerator.generate()`.
-
-5. The response flows back as a typed `ScriptGenerationResponse` with the generated code, validation status, RAG context used, and generation time.
-
----
-
-## 4. Data Science & Advanced Logic — Why RAG?
-
-### The Problem with Naive Prompting
-
-If you just tell an LLM: *"Write a Selenium test to login to the app"*, it will generate generic Selenium code. But **our enterprise apps use proprietary wrapper libraries** with custom methods like `MobileDriver.tap_element()` or `WebPortal.navigate_to_module()`. The LLM has never seen these APIs during training.
-
-### How RAG Solves This
-
-**RAG (Retrieval-Augmented Generation)** bridges the gap between the LLM's general knowledge and our specific codebase:
+### Pipeline Architecture
 
 ```
-User Description
+User Description ("Test login on Android")
        │
        ▼
 ┌──────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  Embedding   │────▶│  FAISS Vector    │────▶│  Top-K Relevant │
-│  (MiniLM)    │     │  Similarity      │     │  Methods        │
-│              │     │  Search          │     │  Retrieved      │
+│  Embedding   │────▶│  FAISS Vector    │────▶│  Top-10 Relevant│
+│  (MiniLM     │     │  Similarity      │     │  Methods        │
+│   all-MiniLM │     │  Search (L2)     │     │  Retrieved      │
+│   -L6-v2)    │     │                  │     │                 │
 └──────────────┘     └──────────────────┘     └────────┬────────┘
                                                        │
                                                        ▼
                                               ┌─────────────────┐
                                               │  Mega-Prompt     │
-                                              │  Construction    │
-                                              │  (Constraints +  │
-                                              │   Context +      │
-                                              │   User Task)     │
+                                              │  ┌─────────────┐ │
+                                              │  │ Constraints  │ │
+                                              │  │ + Context    │ │
+                                              │  │ + User Task  │ │
+                                              │  └─────────────┘ │
                                               └────────┬────────┘
                                                        │
                                                        ▼
                                               ┌─────────────────┐
                                               │  Ollama LLM     │
                                               │  (Mistral 7B)   │
+                                              │  temp=0.3       │
                                               └────────┬────────┘
                                                        │
                                                        ▼
                                               ┌─────────────────┐
                                               │  Code Guardrail │
-                                              │  (AST Validation │
-                                              │   + Import Block)│
+                                              │  AST Validation  │
+                                              │  Import Blocking │
+                                              │  Size Check      │
                                               └─────────────────┘
-```
-
-### The Pipeline in Detail
-
-1. **Indexing (one-time per project):** `LibraryIndexer` uses Python's `ast` module to parse enterprise library source files. It extracts class names, method signatures, docstrings, and parameter types — creating structured "documents."
-
-2. **Embedding:** Each document is converted to a **384-dimensional vector** using `sentence-transformers/all-MiniLM-L6-v2`. These vectors are stored in a FAISS `IndexFlatL2` (flat index with L2/Euclidean distance).
-
-3. **Retrieval:** When a user submits a description like *"test the login flow on Android"*, that description is embedded into the same vector space, and FAISS returns the **top-K most similar** method signatures (default K=10).
-
-4. **Prompt Construction:** `PromptBuilder` assembles a "Mega-Prompt" with three sections:
-   - **Constraints:** "Only use methods from the provided library. Do not import os, subprocess, sys..."
-   - **Context:** The retrieved method signatures with their docstrings
-   - **Task:** The user's natural language description
-
-5. **Generation:** The assembled prompt is sent to Ollama (Mistral 7B) with `temperature=0.3` for deterministic, focused output.
-
-6. **Guardrail Validation:** `CodeGuardrail` runs the generated code through:
-   - `ast.parse()` — catches syntax errors
-   - Import scanning — blocks forbidden modules (`os`, `subprocess`, `sys`, `shutil`, etc.)
-   - Size limits — rejects scripts exceeding 50KB
-
-> **Why FAISS `IndexFlatL2`?** For our scale (hundreds to low thousands of methods per library), a flat index gives exact nearest-neighbor search with sub-millisecond latency. No need for approximate methods like HNSW or IVF.
-
----
-
-## 5. The "How to Run It" Mental Model
-
-Here's the complete request lifecycle when a user clicks **"Generate Script"**:
-
-```
-┌─────────┐    POST /scripts/generate     ┌──────────┐
-│ Browser  │ ──────────────────────────▶  │ FastAPI   │
-│ (React)  │   {project_id, description,  │ Backend   │
-│          │    device_type, platform,     │          │
-│          │    test_type}                 │          │
-└─────────┘                               └─────┬────┘
-                                                │
-                               ┌────────────────┼────────────────┐
-                               ▼                ▼                ▼
-                        ┌───────────┐   ┌────────────┐   ┌──────────┐
-                        │ 1. Index  │   │ 2. Search  │   │ 3. Build │
-                        │ Library   │   │ FAISS for  │   │ Mega-    │
-                        │ (if new)  │   │ top-10     │   │ Prompt   │
-                        │           │   │ methods    │   │          │
-                        └───────────┘   └────────────┘   └─────┬────┘
-                                                               │
-                                                               ▼
-                                                        ┌──────────┐
-                                                        │ 4. Ollama│
-                                                        │ Generate │
-                                                        │ (≤300s)  │
-                                                        └─────┬────┘
-                                                               │
-                                                               ▼
-                                                        ┌──────────┐
-                                                        │ 5. AST   │
-                                                        │ Guardrail│
-                                                        │ Validate │
-                                                        └─────┬────┘
-                                                               │
-┌─────────┐    ScriptGenerationResponse    ┌──────────┐        │
-│ Browser  │ ◀──────────────────────────── │ FastAPI   │◀───────┘
-│ (React)  │   {script_code, is_valid,     │ Backend   │
-│          │    validation_errors,          │          │
-│          │    rag_context_used,           │          │
-│          │    generation_time_ms}         │          │
-└─────────┘                               └──────────┘
 ```
 
 ### Step-by-Step
 
-| Step | Component | What Happens |
-|------|-----------|-------------|
-| **1** | **React UI** | User fills in project, device type, platform, test type, and a natural language description. Clicks "Generate Script." |
-| **2** | **ApiClient** | `generateScript()` sends a `POST` to `/scripts/generate` with a **310-second timeout**. A loading spinner appears. |
-| **3** | **FastAPI Router** | `scripts.py` receives the request. Pydantic validates the payload. Calls `script_generator.generate()`. |
-| **4** | **ScriptGenerator** | Orchestrates the pipeline: index → search → prompt → generate → validate. |
-| **5** | **LibraryIndexer** | If the project's library hasn't been indexed yet, it parses the Python source files via AST and builds a FAISS index. |
-| **6** | **FAISS Search** | The user's description is embedded and compared against the indexed methods. Top 10 most relevant methods are returned. |
-| **7** | **PromptBuilder** | Constructs the Mega-Prompt: constraints + retrieved context + user task. |
-| **8** | **OllamaClient** | Sends the prompt to the local Ollama server running Mistral 7B. Waits up to 300 seconds. |
-| **9** | **CodeGuardrail** | Parses the generated code with `ast.parse()`. Checks for forbidden imports. Validates size. |
-| **10** | **Response** | Returns `ScriptGenerationResponse` with the code, validation status, which RAG documents were used, and timing. |
-| **11** | **React UI** | Displays the generated script in a code editor. Shows validation status and RAG context as metadata. |
+| Step | Component | File | What Happens |
+|------|-----------|------|-------------|
+| **1** | LibraryIndexer | `rag_engine.py` | Parses enterprise library `.py` files using Python `ast` module. Extracts classes, methods, signatures, docstrings. |
+| **2** | SentenceTransformer | `rag_engine.py` | Converts each extracted document into a **384-dimensional vector** using `all-MiniLM-L6-v2`. |
+| **3** | FAISS Index | `rag_engine.py` | Stores vectors in `IndexFlatL2` for exact nearest-neighbor search. Index is saved per-project. |
+| **4** | Vector Search | `rag_engine.py` | User's description is embedded → compared against index → top-K most similar methods returned. |
+| **5** | PromptBuilder | `rag_engine.py` | Assembles "Mega-Prompt": system constraints + retrieved method signatures + user task description. |
+| **6** | OllamaClient | `ollama_client.py` | Sends prompt to local Ollama server (Mistral 7B). Uses `temperature=0.3` for deterministic output. |
+| **7** | CodeGuardrail | `rag_engine.py` | Validates output: `ast.parse()` for syntax, import scanning for forbidden modules, size limit check. |
+
+### Keyword Fallback
+
+If FAISS/sentence-transformers are not installed, the system gracefully falls back to **keyword matching** — scoring documents by how many query terms appear in their text. This ensures the platform works even without the ML dependencies.
 
 ---
 
-## 🚀 Getting Started
+## 7. Script Generation → Edit → Execution Flow
+
+This is the **core user workflow**. Understanding this end-to-end flow is essential.
+
+### Visual Flow
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        ExecuteView.tsx                           │
+│                                                                  │
+│  ┌─────────────────────┐    ┌──────────────────────────────────┐│
+│  │ ConfigurationPanel  │    │ DescriptionInput                 ││
+│  │                     │    │                                  ││
+│  │ • Select Project    │    │ • Natural language input         ││
+│  │ • Device Type       │    │ • [Generate Script] button       ││
+│  │ • Platform          │    │ • Editable code editor (textarea)││
+│  │ • Test Type         │    │ • [Execute Test] button          ││
+│  │ • [Validate Device] │    │                                  ││
+│  └─────────────────────┘    └──────────────────────────────────┘│
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Step-by-Step Request Lifecycle
+
+| Step | Actor | Action |
+|------|-------|--------|
+| **1** | User | Selects project, device type, platform, test type. Clicks "Validate Device." |
+| **2** | Frontend | `POST /devices/validate` — backend checks real device/browser availability. |
+| **3** | User | Writes test description in plain English. Clicks "Generate Script." |
+| **4** | Frontend | `POST /scripts/generate` with 310s timeout → backend runs full RAG pipeline. |
+| **5** | Backend | RAG search → Mega-Prompt → Ollama inference → Code Guardrail validation. |
+| **6** | Frontend | Displays generated script in **editable textarea**. User can modify the code. |
+| **7** | User | Reviews/edits script. Clicks "Execute Test." |
+| **8** | Frontend | `POST /scripts/save` — saves the **current edited script** (not original). |
+| **9** | Frontend | `POST /executions/run` with saved `test_case_id`. |
+| **10** | Backend | ExecutionService selects adapter (Playwright/Appium), runs script, collects results. |
+| **11** | Frontend | Displays results: pass/fail, step timeline, duration, AI failure analysis. |
+
+### Critical Implementation Detail
+
+The frontend tracks `generatedCode` in React state. When the user edits the script, `handleCodeChange` updates this state **and resets `savedTestCaseId`**. This ensures the execute button always saves the latest version:
+
+```typescript
+const handleCodeChange = (code: string) => {
+  setGeneratedCode(code);
+  setSavedTestCaseId(null); // Forces re-save on next execute
+};
+```
+
+---
+
+## 8. Automation Adapters & Device Management
+
+### Adapter Pattern
+
+The system uses an abstract `BaseAutomationAdapter` with two concrete implementations:
+
+```
+BaseAutomationAdapter (abstract)
+├── PlaywrightAdapter    # Web browser testing (Chrome, Firefox, WebKit)
+└── AppiumAdapter        # Mobile testing (Android, iOS)
+```
+
+### PlaywrightAdapter
+
+- Launches a browser via Playwright
+- Executes the generated Python script with step tracking
+- Captures screenshots on failure and video recordings
+- Handles browser lifecycle (setup → execute → teardown)
+
+### AppiumAdapter
+
+- Connects to Appium server for mobile device automation
+- Supports Android (ADB) and iOS (XCUITest)
+- Same interface as PlaywrightAdapter for consistent orchestration
+
+### Platform Enum Coercion
+
+The `ExecutionService` coerces raw platform strings (from API) into `Platform` enum members before passing to adapters. This prevents adapter initialization failures from type mismatches:
+
+```python
+# execution_service.py
+platform_enum = PlatformEnum(platform)  # "chrome" → Platform.CHROME
+adapter.setup(platform=platform_enum)
+```
+
+### Device Validation (`mtk_connect.py`)
+
+Real device validation checks:
+
+| Platform | What's Checked |
+|----------|----------------|
+| **Chrome/Firefox/WebKit** | Playwright browser binaries installed (managed cache or system) |
+| **Android** | ADB available + `adb devices` shows connected device |
+| **iOS** | iOS tooling available + simulator/device detected |
+
+---
+
+## 9. Real-Time Communication (WebSockets)
+
+### Execution Streaming
+
+During test execution, the backend streams status updates to the frontend via WebSocket:
+
+```
+Frontend (useExecutionWebSocket) ←── WebSocket ←── Backend (execution_service)
+```
+
+**Events streamed:**
+- Step started / completed
+- Screenshot captured
+- Execution progress percentage
+- Final result (pass/fail + metrics)
+
+### Frontend Hook
+
+```typescript
+// hooks/useExecutionWebSocket.ts
+const { status, steps, progress } = useExecutionWebSocket(executionId);
+```
+
+---
+
+## 10. Resilience, Timeouts & Error Handling
+
+### Timeout Strategy
+
+| Request Type | Frontend Timeout | Backend Timeout | Rationale |
+|-------------|-----------------|----------------|-----------|
+| Standard API | **30s** | N/A | CRUD, health checks — should be instant |
+| LLM Generation | **310s** | **300s** | 7B model on consumer hardware can take 2-5 min |
+| Device Validation | **30s** | **10s** | ADB/browser checks are fast |
+
+### Exponential Backoff (Frontend)
+
+```
+Retry 1: wait ~1 second
+Retry 2: wait ~2 seconds
+Retry 3: wait ~4 seconds
+(then fail)
+```
+
+Configured in `src/services/api/config.ts`:
+```typescript
+RETRY_ATTEMPTS: 3,
+RETRY_DELAY: 1000,  // Base delay in ms
+```
+
+### Error Handling Patterns
+
+- **Backend:** Every service method returns structured error responses. The RAG pipeline returns `validation_errors` array. Execution returns `ai_analysis` with human-readable failure explanations.
+- **Frontend:** React Query provides `isError`, `error` objects. Toast notifications display user-friendly messages. The Connection Overlay handles connectivity failures separately.
+
+### AI Failure Analyst
+
+When a test fails, the system sends the error traceback to Ollama with a specialized prompt that translates technical errors into one-sentence explanations for non-technical users:
+
+```python
+# rag_engine.py → PromptBuilder.build_failure_analysis_prompt()
+"Translate this technical error into a 1-sentence explanation..."
+```
+
+---
+
+## 11. Security & Code Guardrails
+
+### The CodeGuardrail (`rag_engine.py`)
+
+Every LLM-generated script passes through static analysis before saving or execution:
+
+| Check | Implementation | Purpose |
+|-------|---------------|---------|
+| **Syntax validation** | `ast.parse(code)` | Reject unparseable Python |
+| **Forbidden imports** | AST walk for `Import`/`ImportFrom` nodes | Block `os`, `subprocess`, `sys`, `shutil`, `pathlib`, `socket`, `requests` |
+| **Dangerous patterns** | Regex scan | Block `exec()`, `eval()`, `__import__()`, `compile()`, file writes |
+| **Size limit** | Byte length check | Reject scripts > 50KB |
+
+### Why These Restrictions?
+
+Generated scripts run on the user's machine. Blocking system-level access prevents:
+- Filesystem damage (no `os.remove`, `shutil.rmtree`)
+- Network exfiltration (no `requests`, `socket`)
+- Code injection (no `exec`, `eval`)
+- Arbitrary process spawning (no `subprocess`)
+
+---
+
+## 12. Local Development Setup
+
+### Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **Python** | 3.10+ | Backend runtime |
+| **Node.js** | 18+ | Frontend build tooling |
+| **Ollama** | Latest | Local LLM server |
+| **Playwright** | via pip | Browser automation (auto-installs browsers) |
+
+### Quick Start
 
 ```bash
-# Terminal 1 — Start Ollama
+# Terminal 1 — Start Ollama (download model on first run)
 ollama serve
 ollama pull mistral:7b
 
 # Terminal 2 — Start Backend
 cd backend
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+playwright install              # Install browser binaries
+cp .env.example .env            # Configure if needed
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Terminal 3 — Start Frontend
@@ -343,6 +608,124 @@ npm install
 npm run dev
 # Open http://localhost:5173
 ```
+
+### Verifying Everything Works
+
+```bash
+# Check backend health
+curl http://localhost:8000/system/health
+
+# Check Ollama is reachable
+curl http://localhost:11434/api/tags
+
+# Check backend can reach Ollama
+curl http://localhost:8000/system/status
+```
+
+### Environment Variables
+
+Copy `backend/.env.example` to `backend/.env` and adjust:
+
+```env
+DEBUG=true                           # Enable debug logging
+HOST=127.0.0.1
+PORT=8000
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=mistral:7b
+DATABASE_PATH=./data/automation.db
+```
+
+---
+
+## 13. Common Debugging Scenarios
+
+### "Script generation hangs forever"
+
+**Cause:** Mixed-content blocking. HTTPS frontend → HTTP backend requests are silently dropped.  
+**Fix:** Run frontend locally at `http://localhost:5173`, or use the Connection Overlay to set an HTTPS tunnel URL.
+
+### "Automation adapter initialization failed"
+
+**Cause:** Platform string not matching enum (e.g., `"chrome"` vs `Platform.CHROME`).  
+**Fix:** Already handled — `execution_service.py` coerces strings to enums. If you see this, check that the platform value exists in the `Platform` enum in `schemas.py`.
+
+### "Playwright setup failed / NotImplementedError"
+
+**Cause:** Browser binaries not installed.  
+**Fix:** Run `playwright install` in the backend virtual environment.
+
+### "Generated script has forbidden imports"
+
+**Cause:** LLM occasionally ignores constraints.  
+**Fix:** The CodeGuardrail catches this automatically. The response will have `is_valid: false` with specific errors. The self-correction loop retries once with error feedback.
+
+### "Execution shows hardcoded results"
+
+**Cause:** Frontend component using mock data instead of API response.  
+**Fix:** Ensure `ResultsViewer.tsx` reads from `result.steps` (the API response), not local mock arrays.
+
+### Backend won't start — syntax error in `main.py`
+
+**Known issue:** Check for leading whitespace on import/include lines. Python is whitespace-sensitive — extra spaces before `from` or `app.include_router` will cause `IndentationError`.
+
+---
+
+## 14. Contributing Guidelines
+
+### Before You Code
+
+1. **Read this guide** end-to-end
+2. **Run the platform locally** and generate a test script — trace the request through every layer
+3. **Understand the file you're changing** — read the module docstring and related tests
+
+### Code Standards
+
+| Area | Standard |
+|------|----------|
+| **Python** | Type hints on all functions. Docstrings on all classes/public methods. Use `loguru` for logging. |
+| **TypeScript** | Strict mode. No `any` types. Mirror Pydantic schemas exactly in `types.ts`. |
+| **CSS** | Use Tailwind semantic tokens only. Never hardcode colors. |
+| **API changes** | Update both `schemas.py` (backend) AND `types.ts` (frontend) simultaneously. |
+| **New endpoints** | Add to the endpoint map in `config.ts` and create a typed method in `client.ts`. |
+
+### Adding a New Feature — Checklist
+
+- [ ] Backend: Add Pydantic schema in `schemas.py`
+- [ ] Backend: Add API route in `api/`
+- [ ] Backend: Add service logic in `services/`
+- [ ] Frontend: Add TypeScript type in `types.ts`
+- [ ] Frontend: Add endpoint to `config.ts`
+- [ ] Frontend: Add typed method to `client.ts`
+- [ ] Frontend: Add React Query hook in `useApi.ts`
+- [ ] Frontend: Build UI component
+- [ ] Test: Verify end-to-end flow locally
+
+### Key Files to Understand First
+
+If you're short on time, read these five files in order:
+
+1. `backend/app/services/rag_engine.py` — The AI brain (indexing, search, prompt building, guardrails)
+2. `backend/app/services/script_generator.py` — The orchestrator (ties RAG + Ollama + guardrail together)
+3. `src/components/views/ExecuteView.tsx` — The main user workflow (generate → edit → execute)
+4. `src/services/api/client.ts` — How frontend talks to backend
+5. `backend/app/services/execution_service.py` — How scripts actually run
+
+---
+
+## 15. Glossary
+
+| Term | Definition |
+|------|-----------|
+| **RAG** | Retrieval-Augmented Generation — enriching LLM prompts with retrieved context from a knowledge base |
+| **FAISS** | Facebook AI Similarity Search — efficient vector similarity search library |
+| **Mega-Prompt** | The assembled prompt containing constraints + library context + user task |
+| **Code Guardrail** | Static analysis layer that validates LLM-generated code before execution |
+| **Ollama** | Local LLM server that runs models like Mistral 7B on consumer hardware |
+| **Adapter Pattern** | Design pattern where PlaywrightAdapter and AppiumAdapter share a common interface |
+| **Mixed-Content Blocking** | Browser security feature that blocks HTTP requests from HTTPS pages |
+| **Enterprise Library** | Proprietary test automation APIs specific to the organization |
+| **Sentence Transformer** | ML model that converts text into fixed-size vector embeddings |
+| **IndexFlatL2** | FAISS index type using exact L2 (Euclidean) distance — accurate but brute-force |
 
 ---
 

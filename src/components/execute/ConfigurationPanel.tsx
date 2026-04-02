@@ -218,6 +218,31 @@ export function ConfigurationPanel({
             className="bg-secondary border-border"
           />
         </div>
+
+        {/* STB-specific fields */}
+        {config.deviceType === 'stb' && (
+          <>
+            <div>
+              <Label className="text-sm text-muted-foreground mb-2 block">RedRat IP Address</Label>
+              <Input
+                value={config.redratIp || ''}
+                onChange={(e) => updateConfig('redratIp', e.target.value)}
+                placeholder="e.g., 192.168.1.100"
+                className="bg-secondary border-border"
+              />
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground mb-2 block">HDMI Capture Index</Label>
+              <Input
+                type="number"
+                value={config.hdmiCaptureIndex ?? 0}
+                onChange={(e) => updateConfig('hdmiCaptureIndex', parseInt(e.target.value) || 0)}
+                placeholder="0"
+                className="bg-secondary border-border"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Validate Button */}

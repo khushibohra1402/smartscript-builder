@@ -1,4 +1,4 @@
-import { Monitor, Smartphone, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Monitor, Smartphone, Tv, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +22,10 @@ const platformOptions: Record<DeviceType, { value: Platform; label: string }[]> 
   mobile: [
     { value: 'android', label: 'Android' },
     { value: 'ios', label: 'iOS' },
+  ],
+  stb: [
+    { value: 'stb_linux', label: 'STB Linux' },
+    { value: 'stb_proprietary', label: 'STB Proprietary' },
   ],
 };
 

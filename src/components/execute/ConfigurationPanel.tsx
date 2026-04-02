@@ -123,7 +123,7 @@ export function ConfigurationPanel({
         {/* Device Type */}
         <div>
           <Label className="text-sm text-muted-foreground mb-2 block">Device Type</Label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => {
                 onConfigChange({ ...config, deviceType: 'web', platform: 'chrome' });

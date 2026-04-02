@@ -105,12 +105,18 @@ class ExecutionService:
         
         try:
             # Setup automation
-            setup_success = await adapter.setup({
+            setup_config = {
                 "platform": platform,
                 "device_id": device_id,
                 "artifacts_dir": artifacts_dir,
                 "headless": settings.PLAYWRIGHT_HEADLESS
-            })
+            }
+            # Inject STB-specific config
+            if device_type == DeviceType.STB:
+                setup_config["redrat_ip"] = kwargs.get("redrat_ip", "192.168.1.100")
+                setup_config["hdmi_capture_index"] = kwargs.get("hdmi_capture_index", 0)
+            
+            setup_success = await adapter.setup(setup_config)
             
             if not setup_success:
                 return self._create_error_result(

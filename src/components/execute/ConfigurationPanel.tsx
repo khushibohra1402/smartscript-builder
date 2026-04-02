@@ -152,6 +152,20 @@ export function ConfigurationPanel({
               <Smartphone className="w-4 h-4" />
               <span className="text-sm font-medium">Mobile</span>
             </button>
+            <button
+              onClick={() => {
+                onConfigChange({ ...config, deviceType: 'stb', platform: 'stb_linux', redratIp: config.redratIp || '192.168.1.100', hdmiCaptureIndex: config.hdmiCaptureIndex ?? 0 });
+              }}
+              className={cn(
+                "flex items-center justify-center gap-2 p-3 rounded-lg border transition-all",
+                config.deviceType === 'stb'
+                  ? "bg-primary/10 border-primary text-primary"
+                  : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+              )}
+            >
+              <Tv className="w-4 h-4" />
+              <span className="text-sm font-medium">STB</span>
+            </button>
           </div>
         </div>
 

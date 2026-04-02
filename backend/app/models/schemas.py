@@ -30,6 +30,7 @@ class ExecutionStatus(str, Enum):
 class DeviceType(str, Enum):
     WEB = "web"
     MOBILE = "mobile"
+    STB = "stb"
 
 
 class Platform(str, Enum):
@@ -38,6 +39,8 @@ class Platform(str, Enum):
     SAFARI = "safari"
     ANDROID = "android"
     IOS = "ios"
+    STB_LINUX = "stb_linux"
+    STB_PROPRIETARY = "stb_proprietary"
 
 
 class TestType(str, Enum):

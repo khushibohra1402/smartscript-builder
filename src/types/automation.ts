@@ -47,6 +47,9 @@ export interface TestConfiguration {
   testType: TestType;
   testCaseName: string;
   description: string;
+  // STB-specific
+  redratIp?: string;
+  hdmiCaptureIndex?: number;
 }
 
 export interface DeviceStatus {

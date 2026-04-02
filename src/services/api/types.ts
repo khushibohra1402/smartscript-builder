@@ -66,6 +66,8 @@ export interface ScriptGenerationRequest {
   device_type: DeviceType;
   platform: Platform;
   test_type: TestType;
+  redrat_ip?: string;
+  hdmi_capture_index?: number;
 }
 
 export interface ScriptGenerationResponse {

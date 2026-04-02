@@ -82,6 +82,13 @@ class ExecutionService:
         # Get appropriate adapter
         adapter = get_adapter(device_type)
         
+        # For STB, inject hardware config
+        if device_type == DeviceType.STB:
+            stb_config = {
+                "redrat_ip": kwargs.get("redrat_ip", "192.168.1.100"),
+                "hdmi_capture_index": kwargs.get("hdmi_capture_index", 0),
+            }
+        
         # Ensure platform is the enum type, not a raw string
         if isinstance(platform, str):
             try:

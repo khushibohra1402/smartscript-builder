@@ -1,4 +1,4 @@
-import { Monitor, Smartphone, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Monitor, Smartphone, Tv, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +22,10 @@ const platformOptions: Record<DeviceType, { value: Platform; label: string }[]> 
   mobile: [
     { value: 'android', label: 'Android' },
     { value: 'ios', label: 'iOS' },
+  ],
+  stb: [
+    { value: 'stb_linux', label: 'STB Linux' },
+    { value: 'stb_proprietary', label: 'STB Proprietary' },
   ],
 };
 
@@ -119,7 +123,7 @@ export function ConfigurationPanel({
         {/* Device Type */}
         <div>
           <Label className="text-sm text-muted-foreground mb-2 block">Device Type</Label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => {
                 onConfigChange({ ...config, deviceType: 'web', platform: 'chrome' });
@@ -147,6 +151,20 @@ export function ConfigurationPanel({
             >
               <Smartphone className="w-4 h-4" />
               <span className="text-sm font-medium">Mobile</span>
+            </button>
+            <button
+              onClick={() => {
+                onConfigChange({ ...config, deviceType: 'stb', platform: 'stb_linux', redratIp: config.redratIp || '192.168.1.100', hdmiCaptureIndex: config.hdmiCaptureIndex ?? 0 });
+              }}
+              className={cn(
+                "flex items-center justify-center gap-2 p-3 rounded-lg border transition-all",
+                config.deviceType === 'stb'
+                  ? "bg-primary/10 border-primary text-primary"
+                  : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+              )}
+            >
+              <Tv className="w-4 h-4" />
+              <span className="text-sm font-medium">STB</span>
             </button>
           </div>
         </div>
@@ -200,6 +218,31 @@ export function ConfigurationPanel({
             className="bg-secondary border-border"
           />
         </div>
+
+        {/* STB-specific fields */}
+        {config.deviceType === 'stb' && (
+          <>
+            <div>
+              <Label className="text-sm text-muted-foreground mb-2 block">RedRat IP Address</Label>
+              <Input
+                value={config.redratIp || ''}
+                onChange={(e) => updateConfig('redratIp', e.target.value)}
+                placeholder="e.g., 192.168.1.100"
+                className="bg-secondary border-border"
+              />
+            </div>
+            <div>
+              <Label className="text-sm text-muted-foreground mb-2 block">HDMI Capture Index</Label>
+              <Input
+                type="number"
+                value={config.hdmiCaptureIndex ?? 0}
+                onChange={(e) => updateConfig('hdmiCaptureIndex', parseInt(e.target.value) || 0)}
+                placeholder="0"
+                className="bg-secondary border-border"
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Validate Button */}

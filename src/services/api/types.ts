@@ -5,8 +5,8 @@
 
 // Enums
 export type ExecutionStatus = 'PENDING' | 'RUNNING' | 'PASS' | 'FAIL' | 'WARNING';
-export type DeviceType = 'web' | 'mobile';
-export type Platform = 'chrome' | 'firefox' | 'safari' | 'android' | 'ios';
+export type DeviceType = 'web' | 'mobile' | 'stb';
+export type Platform = 'chrome' | 'firefox' | 'safari' | 'android' | 'ios' | 'stb_linux' | 'stb_proprietary';
 export type TestType = 'functional' | 'regression' | 'smoke' | 'integration';
 export type DeviceStatusType = 'ready' | 'busy' | 'offline';
 
@@ -66,6 +66,8 @@ export interface ScriptGenerationRequest {
   device_type: DeviceType;
   platform: Platform;
   test_type: TestType;
+  redrat_ip?: string;
+  hdmi_capture_index?: number;
 }
 
 export interface ScriptGenerationResponse {

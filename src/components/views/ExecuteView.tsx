@@ -77,6 +77,10 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
         device_type: config.deviceType,
         platform: config.platform,
         test_type: config.testType,
+        ...(config.deviceType === 'stb' && {
+          redrat_ip: config.redratIp,
+          hdmi_capture_index: config.hdmiCaptureIndex,
+        }),
       });
 
       setGeneratedCode(result.script_code);

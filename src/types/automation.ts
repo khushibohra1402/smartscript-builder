@@ -1,7 +1,7 @@
 export type ExecutionStatus = 'PASS' | 'FAIL' | 'WARNING' | 'RUNNING' | 'PENDING';
 
-export type DeviceType = 'web' | 'mobile';
-export type Platform = 'chrome' | 'firefox' | 'safari' | 'android' | 'ios';
+export type DeviceType = 'web' | 'mobile' | 'stb';
+export type Platform = 'chrome' | 'firefox' | 'safari' | 'android' | 'ios' | 'stb_linux' | 'stb_proprietary';
 export type TestType = 'functional' | 'regression' | 'smoke' | 'integration';
 
 export interface Project {
@@ -47,6 +47,9 @@ export interface TestConfiguration {
   testType: TestType;
   testCaseName: string;
   description: string;
+  // STB-specific
+  redratIp?: string;
+  hdmiCaptureIndex?: number;
 }
 
 export interface DeviceStatus {

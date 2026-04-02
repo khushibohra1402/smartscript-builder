@@ -129,6 +129,9 @@ class ScriptGenerationRequest(BaseModel):
     device_type: DeviceType
     platform: Platform
     test_type: TestType
+    # STB-specific fields
+    redrat_ip: Optional[str] = None
+    hdmi_capture_index: Optional[int] = None
 
 
 class ScriptGenerationResponse(BaseModel):

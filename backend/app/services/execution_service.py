@@ -47,7 +47,8 @@ class ExecutionService:
         device_type: DeviceType,
         platform: str,
         device_id: Optional[str] = None,
-        on_step_complete: Optional[Callable[[StepUpdateMessage], Awaitable[None]]] = None
+        on_step_complete: Optional[Callable[[StepUpdateMessage], Awaitable[None]]] = None,
+        **kwargs
     ) -> ExecutionResultSchema:
         """
         Execute a test case and return the result.

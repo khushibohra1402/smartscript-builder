@@ -50,6 +50,13 @@ export interface TestConfiguration {
   // STB-specific
   redratIp?: string;
   hdmiCaptureIndex?: number;
+  stbModel?: 'G4' | 'G5';
+  stbType?: 'Production' | 'Development';
+  stbIp?: string;
+  rcuType?: 'IRRX' | 'RPRCU';
+  rcuIp?: string;
+  smartPlugEnabled?: boolean;
+  smartPlugIp?: string;
 }
 
 export interface DeviceStatus {

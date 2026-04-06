@@ -68,6 +68,26 @@ export interface ScriptGenerationRequest {
   test_type: TestType;
   redrat_ip?: string;
   hdmi_capture_index?: number;
+  stb_model?: string;
+  stb_type?: string;
+  stb_ip?: string;
+  rcu_type?: string;
+  rcu_ip?: string;
+  smart_plug_enabled?: boolean;
+  smart_plug_ip?: string;
+}
+
+export interface STBNetworkValidationRequest {
+  stb_ip: string;
+  rcu_ip: string;
+  smart_plug_ip?: string;
+}
+
+export interface STBNetworkValidationResponse {
+  status: 'success' | 'failed';
+  local_ip: string;
+  devices: Record<string, string>;
+  issues?: string[];
 }
 
 export interface ScriptGenerationResponse {

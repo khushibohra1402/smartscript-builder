@@ -1,4 +1,4 @@
-import { Monitor, Smartphone, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { Monitor, Smartphone, Tv, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,7 +23,35 @@ const platformOptions: Record<DeviceType, { value: Platform; label: string }[]> 
     { value: 'android', label: 'Android' },
     { value: 'ios', label: 'iOS' },
   ],
+  stb: [
+    { value: 'stb_linux', label: 'STB Linux' },
+    { value: 'stb_proprietary', label: 'STB Proprietary' },
+  ],
 };
+
+interface RadioOptionProps {
+  label: string;
+  value: string;
+  selected: boolean;
+  onChange: () => void;
+}
+
+function RadioOption({ label, value, selected, onChange }: RadioOptionProps) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className={cn(
+        "px-4 py-2 rounded-lg border text-sm font-medium transition-all",
+        selected
+          ? "bg-primary/10 border-primary text-primary"
+          : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 interface ConfigurationPanelProps {
   config: TestConfiguration;
@@ -49,6 +77,8 @@ export function ConfigurationPanel({
     onConfigChange({ ...config, [key]: value });
   };
 
+  const isSTB = config.deviceType === 'stb';
+
   return (
     <div className="glass-card p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -62,7 +92,7 @@ export function ConfigurationPanel({
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Project Selection */}
+        {/* 1. Project Selection */}
         <div className="col-span-2">
           <Label className="text-sm text-muted-foreground mb-2 block">Project</Label>
           <Select
@@ -116,10 +146,10 @@ export function ConfigurationPanel({
           </Select>
         </div>
 
-        {/* Device Type */}
-        <div>
+        {/* 2. Device Type */}
+        <div className="col-span-2">
           <Label className="text-sm text-muted-foreground mb-2 block">Device Type</Label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={() => {
                 onConfigChange({ ...config, deviceType: 'web', platform: 'chrome' });
@@ -148,28 +178,143 @@ export function ConfigurationPanel({
               <Smartphone className="w-4 h-4" />
               <span className="text-sm font-medium">Mobile</span>
             </button>
+            <button
+              onClick={() => {
+                onConfigChange({
+                  ...config,
+                  deviceType: 'stb',
+                  platform: 'stb_linux',
+                  stbModel: config.stbModel || 'G4',
+                  stbType: config.stbType || 'Production',
+                  rcuType: config.rcuType || 'IRRX',
+                  smartPlugEnabled: config.smartPlugEnabled ?? false,
+                  hdmiCaptureIndex: config.hdmiCaptureIndex ?? 0,
+                });
+              }}
+              className={cn(
+                "flex items-center justify-center gap-2 p-3 rounded-lg border transition-all",
+                config.deviceType === 'stb'
+                  ? "bg-primary/10 border-primary text-primary"
+                  : "bg-secondary border-border text-muted-foreground hover:border-primary/50"
+              )}
+            >
+              <Tv className="w-4 h-4" />
+              <span className="text-sm font-medium">STB</span>
+            </button>
           </div>
         </div>
 
-        {/* Platform */}
-        <div>
-          <Label className="text-sm text-muted-foreground mb-2 block">Platform</Label>
-          <Select
-            value={config.platform}
-            onValueChange={(value) => updateConfig('platform', value as Platform)}
-          >
-            <SelectTrigger className="bg-secondary border-border">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {platformOptions[config.deviceType].map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {/* --- STB-specific fields --- */}
+        {isSTB && (
+          <>
+            {/* 3. STB Model */}
+            <div className="col-span-2">
+              <Label className="text-sm text-muted-foreground mb-2 block">STB Model</Label>
+              <div className="flex gap-2">
+                <RadioOption label="G4" value="G4" selected={config.stbModel === 'G4'} onChange={() => updateConfig('stbModel', 'G4')} />
+                <RadioOption label="G5" value="G5" selected={config.stbModel === 'G5'} onChange={() => updateConfig('stbModel', 'G5')} />
+              </div>
+            </div>
+
+            {/* 4. STB Type */}
+            <div className="col-span-2">
+              <Label className="text-sm text-muted-foreground mb-2 block">STB Type</Label>
+              <div className="flex gap-2">
+                <RadioOption label="Production" value="Production" selected={config.stbType === 'Production'} onChange={() => updateConfig('stbType', 'Production')} />
+                <RadioOption label="Development" value="Development" selected={config.stbType === 'Development'} onChange={() => updateConfig('stbType', 'Development')} />
+              </div>
+            </div>
+
+            {/* 5. STB IP */}
+            <div className="col-span-2">
+              <Label className="text-sm text-muted-foreground mb-2 block">STB IP Address</Label>
+              <Input
+                value={config.stbIp || ''}
+                onChange={(e) => updateConfig('stbIp', e.target.value)}
+                placeholder="e.g., 192.168.1.45"
+                className="bg-secondary border-border"
+              />
+            </div>
+
+            {/* 6. RCU Type */}
+            <div className="col-span-2">
+              <Label className="text-sm text-muted-foreground mb-2 block">RCU Type</Label>
+              <div className="flex gap-2">
+                <RadioOption label="IRRX" value="IRRX" selected={config.rcuType === 'IRRX'} onChange={() => updateConfig('rcuType', 'IRRX')} />
+                <RadioOption label="RPRCU" value="RPRCU" selected={config.rcuType === 'RPRCU'} onChange={() => updateConfig('rcuType', 'RPRCU')} />
+              </div>
+            </div>
+
+            {/* 7. RCU IP */}
+            <div className="col-span-2">
+              <Label className="text-sm text-muted-foreground mb-2 block">RCU IP Address</Label>
+              <Input
+                value={config.rcuIp || config.redratIp || ''}
+                onChange={(e) => {
+                  onConfigChange({ ...config, rcuIp: e.target.value, redratIp: e.target.value });
+                }}
+                placeholder="e.g., 192.168.1.60"
+                className="bg-secondary border-border"
+              />
+            </div>
+
+            {/* 8. Smart Plug */}
+            <div className="col-span-2">
+              <Label className="text-sm text-muted-foreground mb-2 block">Smart Plug</Label>
+              <div className="flex gap-2">
+                <RadioOption label="Yes" value="yes" selected={config.smartPlugEnabled === true} onChange={() => updateConfig('smartPlugEnabled', true)} />
+                <RadioOption label="No" value="no" selected={config.smartPlugEnabled === false || config.smartPlugEnabled === undefined} onChange={() => updateConfig('smartPlugEnabled', false)} />
+              </div>
+            </div>
+
+            {/* 9. Smart Plug IP (conditional) */}
+            {config.smartPlugEnabled && (
+              <div className="col-span-2">
+                <Label className="text-sm text-muted-foreground mb-2 block">Smart Plug IP Address</Label>
+                <Input
+                  value={config.smartPlugIp || ''}
+                  onChange={(e) => updateConfig('smartPlugIp', e.target.value)}
+                  placeholder="e.g., 192.168.1.70"
+                  className="bg-secondary border-border"
+                />
+              </div>
+            )}
+
+            {/* HDMI Capture Index */}
+            <div>
+              <Label className="text-sm text-muted-foreground mb-2 block">HDMI Capture Index</Label>
+              <Input
+                type="number"
+                value={config.hdmiCaptureIndex ?? 0}
+                onChange={(e) => updateConfig('hdmiCaptureIndex', parseInt(e.target.value) || 0)}
+                placeholder="0"
+                className="bg-secondary border-border"
+              />
+            </div>
+          </>
+        )}
+
+        {/* Non-STB: Platform selector */}
+        {!isSTB && (
+          <div>
+            <Label className="text-sm text-muted-foreground mb-2 block">Platform</Label>
+            <Select
+              value={config.platform}
+              onValueChange={(value) => updateConfig('platform', value as Platform)}
+            >
+              <SelectTrigger className="bg-secondary border-border">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {platformOptions[config.deviceType].map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {/* Test Type */}
         <div>

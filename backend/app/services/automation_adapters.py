@@ -407,9 +407,164 @@ class AppiumAdapter(BaseAutomationAdapter):
             logger.error(f"Appium teardown error: {e}")
 
 
+class STBAdapter(BaseAutomationAdapter):
+    """
+    STB Adapter for Set-Top Box automation.
+    Combines HDMI vision capture + RedRat IR control.
+    """
+    
+    def __init__(self):
+        self.vision = None
+        self.remote = None
+        self.steps: List[ExecutionStepSchema] = []
+        self.artifacts_dir: Optional[Path] = None
+    
+    async def setup(self, config: Dict[str, Any]) -> bool:
+        """Initialize STB hardware connections."""
+        try:
+            from app.services.stb_vision import STBVisionService
+            from app.services.redrat_bridge import RedRatController
+            
+            hdmi_index = config.get("hdmi_capture_index", 0)
+            redrat_ip = config.get("redrat_ip", "192.168.1.100")
+            self.artifacts_dir = config.get("artifacts_dir")
+            
+            # Connect HDMI capture
+            self.vision = STBVisionService(hdmi_capture_index=hdmi_index)
+            vision_ok = self.vision.connect(timeout=15.0)
+            if not vision_ok:
+                logger.error("HDMI capture connection failed")
+                return False
+            
+            # Connect RedRat IR blaster
+            self.remote = RedRatController(ip_address=redrat_ip)
+            remote_ok = await self.remote.connect(timeout=10.0)
+            if not remote_ok:
+                logger.error("RedRat IR blaster connection failed")
+                return False
+            
+            logger.info("STB adapter initialized (vision + IR)")
+            return True
+        
+        except Exception as e:
+            logger.error(f"STB setup failed: {e}")
+            return False
+    
+    async def execute_script(
+        self,
+        script_code: str,
+        artifacts_dir: Path
+    ) -> Dict[str, Any]:
+        """Execute an STB test script via subprocess with log capture."""
+        import subprocess
+        import tempfile
+        
+        self.steps = []
+        self.artifacts_dir = artifacts_dir
+        start_time = time.time()
+        status = ExecutionStatus.PASS
+        error_message = None
+        screenshot_failure = None
+        
+        # Write script to temp file
+        script_file = artifacts_dir / "test_script.py"
+        script_file.write_text(script_code)
+        
+        try:
+            proc = subprocess.Popen(
+                ["python", str(script_file)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                cwd=str(artifacts_dir)
+            )
+            
+            stdout, stderr = proc.communicate(timeout=300)
+            
+            # Parse step results from stdout (convention: lines starting with STEP:)
+            for line in stdout.splitlines():
+                line = line.strip()
+                if line.startswith("STEP:"):
+                    parts = line[5:].split("|")
+                    if len(parts) >= 3:
+                        action = parts[0].strip()
+                        result = parts[1].strip().upper() == "PASS"
+                        latency = float(parts[2].strip()) if parts[2].strip() else 0
+                        err = parts[3].strip() if len(parts) > 3 and parts[3].strip() else None
+                        self._add_step(action, result, latency / 1000, err)
+                        if not result:
+                            status = ExecutionStatus.FAIL
+            
+            if proc.returncode != 0:
+                status = ExecutionStatus.FAIL
+                error_message = stderr or f"Script exited with code {proc.returncode}"
+                
+                # Capture failure frame
+                if self.vision and self.vision.is_connected():
+                    fail_path = str(artifacts_dir / f"failure_{int(time.time())}.png")
+                    self.vision.save_frame(fail_path)
+                    screenshot_failure = fail_path
+            
+            if not self.steps:
+                self._add_step(
+                    "Script Execution",
+                    status == ExecutionStatus.PASS,
+                    time.time() - start_time
+                )
+        
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            status = ExecutionStatus.FAIL
+            error_message = "Script execution timed out (300s)"
+            self._add_step("Execution", False, 300, error_message)
+        
+        except Exception as e:
+            logger.error(f"STB execution failed: {e}")
+            status = ExecutionStatus.FAIL
+            error_message = str(e)
+            self._add_step("Execution", False, time.time() - start_time, str(e))
+        
+        total_duration = time.time() - start_time
+        successful_steps = sum(1 for s in self.steps if s.result)
+        
+        return {
+            "status": status,
+            "metrics": ExecutionMetrics(
+                total_duration=total_duration,
+                avg_response_time=sum(s.latency for s in self.steps) / max(len(self.steps), 1) / 1000,
+                step_success_rate=(successful_steps / max(len(self.steps), 1)) * 100
+            ),
+            "steps": self.steps,
+            "artifacts": ExecutionArtifacts(
+                video_path="",
+                screenshot_failure=screenshot_failure
+            ),
+            "error": error_message
+        }
+    
+    def _add_step(self, action: str, result: bool, latency: float, error: Optional[str] = None):
+        self.steps.append(ExecutionStepSchema(
+            action=action,
+            result=result,
+            latency=latency * 1000,
+            error=error
+        ))
+    
+    async def teardown(self) -> None:
+        """Release STB hardware resources."""
+        try:
+            if self.vision:
+                self.vision.disconnect()
+            logger.info("STB adapter teardown complete")
+        except Exception as e:
+            logger.error(f"STB teardown error: {e}")
+
+
 def get_adapter(device_type: DeviceType) -> BaseAutomationAdapter:
     """Factory function to get the appropriate adapter."""
     if device_type == DeviceType.WEB:
         return PlaywrightAdapter()
+    elif device_type == DeviceType.STB:
+        return STBAdapter()
     else:
         return AppiumAdapter()

@@ -31,6 +31,12 @@ export function SettingsView() {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [hasChanges, setHasChanges] = useState(false);
   const { toast } = useToast();
+<<<<<<< HEAD
+=======
+  
+  const { data: health, isLoading: healthLoading, error: healthError, refetch: refetchHealth } = useHealth();
+  const { data: ollamaStatus, isLoading: ollamaLoading, error: ollamaError, refetch: refetchOllama } = useOllamaStatus();
+>>>>>>> 0f4551c90f4ba0041f02f8c31b7ca5880449e728
 
   // TanStack Query v5 hooks
   const {
@@ -82,6 +88,7 @@ export function SettingsView() {
     });
   };
 
+<<<<<<< HEAD
   // ✅ Correct health logic
   const backendOnline =
     !healthLoading &&
@@ -92,6 +99,12 @@ export function SettingsView() {
     !ollamaLoading &&
     !ollamaIsError &&
     ollamaData?.ollama?.healthy === true;
+=======
+  const backendOnline = !healthError && !!health;
+  const ollamaOnline = !ollamaError && !!ollamaStatus && (
+    ollamaStatus?.ollama?.healthy === true || ollamaStatus?.is_available === true || !!ollamaStatus
+  );
+>>>>>>> 0f4551c90f4ba0041f02f8c31b7ca5880449e728
 
   return (
     <div className="p-6 space-y-6 max-w-3xl mx-auto">
@@ -180,8 +193,12 @@ export function SettingsView() {
                   Ollama AI Engine
                 </p>
                 <p className="text-xs text-muted-foreground">
+<<<<<<< HEAD
                   {ollamaData?.ollama?.configured_model ||
                     settings.ollamaModel}
+=======
+                  {ollamaStatus?.ollama?.configured_model || ollamaStatus?.active_model || settings.ollamaModel}
+>>>>>>> 0f4551c90f4ba0041f02f8c31b7ca5880449e728
                 </p>
               </div>
             </div>

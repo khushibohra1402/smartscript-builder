@@ -12,6 +12,10 @@ const initialConfig: TestConfiguration = {
   testType: 'functional',
   testCaseName: '',
   description: '',
+  stbModel: 'G4',
+  stbType: 'Production',
+  rcuType: 'IRRX',
+  smartPlugEnabled: false,
 };
 
 interface ExecuteViewProps {
@@ -36,6 +40,7 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
       const result = await validateDeviceMutation.mutateAsync({
         device_type: config.deviceType,
         platform: config.platform,
+        device_id: config.deviceType === 'stb' ? config.stbIp : undefined,
       });
       
       if (result.is_valid) {
@@ -77,14 +82,27 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
         device_type: config.deviceType,
         platform: config.platform,
         test_type: config.testType,
+        ...(config.deviceType === 'stb' && {
+          redrat_ip: config.rcuIp || config.redratIp,
+          hdmi_capture_index: config.hdmiCaptureIndex,
+          stb_model: config.stbModel,
+          stb_type: config.stbType,
+          stb_ip: config.stbIp,
+          rcu_type: config.rcuType,
+          rcu_ip: config.rcuIp,
+          smart_plug_enabled: config.smartPlugEnabled,
+          smart_plug_ip: config.smartPlugIp,
+        }),
       });
 
       setGeneratedCode(result.script_code);
+      // Reset saved ID so next execute will save the new/edited script
+      setSavedTestCaseId(null);
       
       if (result.is_valid) {
         toast({
           title: "Script Generated",
-          description: `Generated in ${result.generation_time_ms.toFixed(0)}ms. Review and execute.`,
+          description: `Generated in ${result.generation_time_ms.toFixed(0)}ms. Review, edit if needed, and execute.`,
         });
       } else {
         toast({
@@ -102,6 +120,13 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
     }
   };
 
+  /** Called when user edits the script in the code editor */
+  const handleCodeChange = (code: string) => {
+    setGeneratedCode(code);
+    // Invalidate saved test case so execution re-saves with latest edits
+    setSavedTestCaseId(null);
+  };
+
   const handleExecute = async () => {
     if (!config.project || !generatedCode) {
       toast({
@@ -113,22 +138,18 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
     }
 
     try {
-      // First, save the test case if not already saved
-      let testCaseId = savedTestCaseId;
-      
-      if (!testCaseId) {
-        const savedTestCase = await saveTestCaseMutation.mutateAsync({
-          project_id: config.project.id,
-          name: config.testCaseName || 'Untitled Test',
-          description: config.description,
-          device_type: config.deviceType,
-          platform: config.platform,
-          test_type: config.testType,
-          script_code: generatedCode,
-        });
-        testCaseId = savedTestCase.id;
-        setSavedTestCaseId(testCaseId);
-      }
+      // Always save (or re-save) the test case with the current edited script
+      const savedTestCase = await saveTestCaseMutation.mutateAsync({
+        project_id: config.project.id,
+        name: config.testCaseName || 'Untitled Test',
+        description: config.description,
+        device_type: config.deviceType,
+        platform: config.platform,
+        test_type: config.testType,
+        script_code: generatedCode,
+      });
+      const testCaseId = savedTestCase.id;
+      setSavedTestCaseId(testCaseId);
 
       toast({
         title: "Execution Started",
@@ -195,6 +216,7 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
         onExecute={handleExecute}
         isGenerating={generateScriptMutation.isPending}
         generatedCode={generatedCode}
+        onCodeChange={handleCodeChange}
       />
     </div>
   );

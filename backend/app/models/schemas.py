@@ -30,6 +30,7 @@ class ExecutionStatus(str, Enum):
 class DeviceType(str, Enum):
     WEB = "web"
     MOBILE = "mobile"
+    STB = "stb"
 
 
 class Platform(str, Enum):
@@ -38,6 +39,8 @@ class Platform(str, Enum):
     SAFARI = "safari"
     ANDROID = "android"
     IOS = "ios"
+    STB_LINUX = "stb_linux"
+    STB_PROPRIETARY = "stb_proprietary"
 
 
 class TestType(str, Enum):
@@ -119,6 +122,25 @@ class DeviceValidationResponse(BaseModel):
 # Script Generation Schemas (RAG Engine)
 # ============================================================================
 
+class STBConfigRequest(BaseModel):
+    """STB hardware configuration for a project."""
+    stb_model: Optional[str] = None        # "G4" | "G5"
+    stb_type: Optional[str] = None         # "Production" | "Development"
+    stb_ip: Optional[str] = None
+    rcu_type: Optional[str] = None         # "IRRX" | "RPRCU"
+    rcu_ip: Optional[str] = None
+    smart_plug_enabled: Optional[bool] = None
+    smart_plug_ip: Optional[str] = None
+    hdmi_capture_index: Optional[int] = None
+
+
+class STBNetworkValidationRequest(BaseModel):
+    """Request to validate STB network devices."""
+    stb_ip: str
+    rcu_ip: str
+    smart_plug_ip: Optional[str] = None
+
+
 class ScriptGenerationRequest(BaseModel):
     """Request for AI script generation."""
     project_id: str
@@ -126,6 +148,16 @@ class ScriptGenerationRequest(BaseModel):
     device_type: DeviceType
     platform: Platform
     test_type: TestType
+    # STB-specific fields
+    redrat_ip: Optional[str] = None
+    hdmi_capture_index: Optional[int] = None
+    stb_model: Optional[str] = None
+    stb_type: Optional[str] = None
+    stb_ip: Optional[str] = None
+    rcu_type: Optional[str] = None
+    rcu_ip: Optional[str] = None
+    smart_plug_enabled: Optional[bool] = None
+    smart_plug_ip: Optional[str] = None
 
 
 class ScriptGenerationResponse(BaseModel):

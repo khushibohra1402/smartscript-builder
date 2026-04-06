@@ -47,7 +47,8 @@ class ExecutionService:
         device_type: DeviceType,
         platform: str,
         device_id: Optional[str] = None,
-        on_step_complete: Optional[Callable[[StepUpdateMessage], Awaitable[None]]] = None
+        on_step_complete: Optional[Callable[[StepUpdateMessage], Awaitable[None]]] = None,
+        **kwargs
     ) -> ExecutionResultSchema:
         """
         Execute a test case and return the result.
@@ -82,14 +83,40 @@ class ExecutionService:
         # Get appropriate adapter
         adapter = get_adapter(device_type)
         
+        # For STB, inject hardware config
+        if device_type == DeviceType.STB:
+            stb_config = {
+                "redrat_ip": kwargs.get("redrat_ip", "192.168.1.100"),
+                "hdmi_capture_index": kwargs.get("hdmi_capture_index", 0),
+            }
+        
+        # Ensure platform is the enum type, not a raw string
+        if isinstance(platform, str):
+            try:
+                from app.models.schemas import Platform as PlatformEnum
+                platform = PlatformEnum(platform)
+            except ValueError:
+                return self._create_error_result(
+                    execution_id=execution_id,
+                    test_name=test_name,
+                    project_name=project_name,
+                    error=f"Unsupported platform: {platform}"
+                )
+        
         try:
             # Setup automation
-            setup_success = await adapter.setup({
+            setup_config = {
                 "platform": platform,
                 "device_id": device_id,
                 "artifacts_dir": artifacts_dir,
                 "headless": settings.PLAYWRIGHT_HEADLESS
-            })
+            }
+            # Inject STB-specific config
+            if device_type == DeviceType.STB:
+                setup_config["redrat_ip"] = kwargs.get("redrat_ip", "192.168.1.100")
+                setup_config["hdmi_capture_index"] = kwargs.get("hdmi_capture_index", 0)
+            
+            setup_success = await adapter.setup(setup_config)
             
             if not setup_success:
                 return self._create_error_result(

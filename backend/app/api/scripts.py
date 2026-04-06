@@ -46,9 +46,11 @@ async def generate_script(
             detail="Project not found"
         )
     
-    # Generate script
+    # Generate script (pass project name for STB config injection)
     library_path = Path(project.library_path) if project.library_path else None
-    response = await script_generator.generate(request, library_path)
+    response = await script_generator.generate(
+        request, library_path, project_name=project.name
+    )
     
     return response
 

@@ -11,7 +11,8 @@ from loguru import logger
 
 from app.services.rag_engine import library_indexer, prompt_builder, code_guardrail
 from app.services.ollama_client import ollama_client
-from app.models.schemas import ScriptGenerationRequest, ScriptGenerationResponse
+from app.services.config_manager import config_manager
+from app.models.schemas import ScriptGenerationRequest, ScriptGenerationResponse, DeviceType
 
 
 class ScriptGenerator:
@@ -22,24 +23,19 @@ class ScriptGenerator:
     1. Load library index for the project
     2. Search for relevant methods using RAG
     3. Build mega-prompt with constraints + context + task
-    4. Generate code via Ollama
-    5. Validate with code guardrail
+    4. Inject STB environment configuration when applicable
+    5. Generate code via Ollama
+    6. Validate with code guardrail
     """
     
     async def generate(
         self,
         request: ScriptGenerationRequest,
-        library_path: Optional[Path] = None
+        library_path: Optional[Path] = None,
+        project_name: Optional[str] = None,
     ) -> ScriptGenerationResponse:
         """
         Generate a test script from natural language description.
-        
-        Args:
-            request: Script generation request with description and config
-            library_path: Path to project's enterprise library
-        
-        Returns:
-            ScriptGenerationResponse with code and validation results
         """
         start_time = time.time()
         
@@ -67,14 +63,30 @@ class ScriptGenerator:
             test_type=request.test_type.value
         )
         
+        # Step 3.5: Inject STB environment configuration
+        if request.device_type == DeviceType.STB and project_name:
+            # Persist the STB config from the request
+            config_manager.update_stb_config(
+                project_name=project_name,
+                stb_model=request.stb_model,
+                stb_type=request.stb_type,
+                stb_ip=request.stb_ip,
+                rcu_type=request.rcu_type,
+                rcu_ip=request.rcu_ip,
+                smart_plug_enabled=request.smart_plug_enabled,
+                smart_plug_ip=request.smart_plug_ip,
+                hdmi_index=request.hdmi_capture_index,
+            )
+            env_summary = config_manager.get_environment_summary(project_name)
+            prompt += f"\n\n{env_summary}\n"
+            logger.info(f"Injected STB environment config into prompt for {project_name}")
+        
         # Step 4: Generate code via Ollama
         try:
             response = await ollama_client.generate(
                 prompt=prompt,
-                temperature=0.3  # Lower temperature for more deterministic code
+                temperature=0.3
             )
-            
-            # Extract code from response
             script_code = code_guardrail.extract_code_from_response(response)
             
         except TimeoutError as e:

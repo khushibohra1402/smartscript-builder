@@ -12,6 +12,10 @@ const initialConfig: TestConfiguration = {
   testType: 'functional',
   testCaseName: '',
   description: '',
+  stbModel: 'G4',
+  stbType: 'Production',
+  rcuType: 'IRRX',
+  smartPlugEnabled: false,
 };
 
 interface ExecuteViewProps {
@@ -36,6 +40,7 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
       const result = await validateDeviceMutation.mutateAsync({
         device_type: config.deviceType,
         platform: config.platform,
+        device_id: config.deviceType === 'stb' ? config.stbIp : undefined,
       });
       
       if (result.is_valid) {
@@ -78,8 +83,15 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
         platform: config.platform,
         test_type: config.testType,
         ...(config.deviceType === 'stb' && {
-          redrat_ip: config.redratIp,
+          redrat_ip: config.rcuIp || config.redratIp,
           hdmi_capture_index: config.hdmiCaptureIndex,
+          stb_model: config.stbModel,
+          stb_type: config.stbType,
+          stb_ip: config.stbIp,
+          rcu_type: config.rcuType,
+          rcu_ip: config.rcuIp,
+          smart_plug_enabled: config.smartPlugEnabled,
+          smart_plug_ip: config.smartPlugIp,
         }),
       });
 

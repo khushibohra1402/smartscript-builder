@@ -40,6 +40,7 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
       const result = await validateDeviceMutation.mutateAsync({
         device_type: config.deviceType,
         platform: config.platform,
+        device_id: config.deviceType === 'stb' ? config.stbIp : undefined,
       });
       
       if (result.is_valid) {

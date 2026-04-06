@@ -1,17 +1,5 @@
 {
   "compilerOptions": {
-<<<<<<< HEAD
-    "types": ["vitest/globals"],
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "jsxImportSource": "react",
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-=======
->>>>>>> 0f4551c90f4ba0041f02f8c31b7ca5880449e728
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "jsx": "react-jsx",

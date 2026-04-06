@@ -12,6 +12,10 @@ const initialConfig: TestConfiguration = {
   testType: 'functional',
   testCaseName: '',
   description: '',
+  stbModel: 'G4',
+  stbType: 'Production',
+  rcuType: 'IRRX',
+  smartPlugEnabled: false,
 };
 
 interface ExecuteViewProps {

@@ -83,8 +83,15 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
         platform: config.platform,
         test_type: config.testType,
         ...(config.deviceType === 'stb' && {
-          redrat_ip: config.redratIp,
+          redrat_ip: config.rcuIp || config.redratIp,
           hdmi_capture_index: config.hdmiCaptureIndex,
+          stb_model: config.stbModel,
+          stb_type: config.stbType,
+          stb_ip: config.stbIp,
+          rcu_type: config.rcuType,
+          rcu_ip: config.rcuIp,
+          smart_plug_enabled: config.smartPlugEnabled,
+          smart_plug_ip: config.smartPlugIp,
         }),
       });
 

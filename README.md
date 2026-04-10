@@ -1076,4 +1076,3 @@ This project is proprietary. See LICENSE file for details.
 
 ---
 
-> **Built with ❤️ using React, FastAPI, Ollama, and FAISS — fully offline, fully yours.**

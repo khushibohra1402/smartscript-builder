@@ -4,6 +4,7 @@ import { DescriptionInput } from '@/components/execute/DescriptionInput';
 import { TestConfiguration, ExecutionResult } from '@/types/automation';
 import { useToast } from '@/hooks/use-toast';
 import { useGenerateScript, useValidateDevice, useExecuteTest, useSaveTestCase } from '@/hooks/useApi';
+import { isMixedContentBlocked, getBackendUrl } from '@/services/api/config';
 
 const initialConfig: TestConfiguration = {
   project: null,
@@ -36,6 +37,14 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
   const executeTestMutation = useExecuteTest();
 
   const handleValidateDevice = async () => {
+    if (isMixedContentBlocked()) {
+      toast({
+        title: "Cannot reach backend",
+        description: `Open the app on http://localhost:8080 to connect to the local backend, or set an HTTPS backend URL in Settings.`,
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const result = await validateDeviceMutation.mutateAsync({
         device_type: config.deviceType,
@@ -75,6 +84,16 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
       return;
     }
 
+    // Fail fast if mixed-content will block the request
+    if (isMixedContentBlocked()) {
+      toast({
+        title: "Cannot reach backend",
+        description: `This page is served over HTTPS but the backend is at ${getBackendUrl()} (HTTP). Open the app on http://localhost:8080 instead, or use an HTTPS tunnel (e.g. ngrok) and update the backend URL in Settings.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       const result = await generateScriptMutation.mutateAsync({
         project_id: config.project.id,
@@ -95,7 +114,15 @@ export function ExecuteView({ onExecutionComplete }: ExecuteViewProps) {
         }),
       });
 
-      setGeneratedCode(result.script_code);
+      console.log('[SmartScript] Generate response:', {
+        hasCode: !!result.script_code,
+        codeLength: result.script_code?.length,
+        isValid: result.is_valid,
+        errors: result.validation_errors,
+        timeMs: result.generation_time_ms,
+      });
+
+      setGeneratedCode(result.script_code || '');
       // Reset saved ID so next execute will save the new/edited script
       setSavedTestCaseId(null);
       

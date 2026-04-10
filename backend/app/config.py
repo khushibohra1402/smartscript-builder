@@ -25,9 +25,9 @@ class Settings(BaseSettings):
     DATABASE_PATH: Path = Path("./data/automation.db")
     
     # Ollama (Local LLM)
-    OLLAMA_HOST: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "mistral:7b"  # or llama3:7b
-    OLLAMA_TIMEOUT: int = 120  # seconds
+    OLLAMA_HOST : str = "http://127.0.0.1:11434"
+    OLLAMA_MODEL : str = "deepseek-coder:6.7b"  # or llama3:7b
+    OLLAMA_TIMEOUT: int = 1500  # seconds
     
     # RAG Engine
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"

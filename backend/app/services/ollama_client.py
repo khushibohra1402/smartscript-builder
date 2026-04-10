@@ -19,17 +19,19 @@ class OllamaClient:
     def __init__(self):
         self.base_url = settings.OLLAMA_HOST
         self.model = settings.OLLAMA_MODEL
-        self.timeout = 300.0  # 300s for generation requests
+        self.timeout = 700.0  # 300s for generation requests
     
     async def check_health(self) -> bool:
-        """Check if Ollama server is running."""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{self.base_url}/api/tags",
-                    timeout=5.0
-                )
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(f"{self.base_url}/api/tags")
+
+                print("Ollama URL:", f"{self.base_url}/api/tags")
+                print("Status Code:", response.status_code)
+                print("Response:", response.text)
+
                 return response.status_code == 200
+
         except Exception as e:
             logger.warning(f"Ollama health check failed: {e}")
             return False
@@ -56,7 +58,7 @@ class OllamaClient:
         model: Optional[str] = None,
         system: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 4096
+        max_tokens: int = 1500
     ) -> str:
         """
         Generate a response from Ollama (non-streaming).
@@ -79,7 +81,9 @@ class OllamaClient:
             "stream": False,
             "options": {
                 "temperature": temperature,
-                "num_predict": max_tokens
+                "num_predict": max_tokens,
+                "num_ctx": 8192,
+                "num_thred":8
             }
         }
         
@@ -87,18 +91,30 @@ class OllamaClient:
             payload["system"] = system
         
         try:
-            async with httpx.AsyncClient() as client:
+            timeout = httpx.Timeout(
+                connect=30.0,
+                read=self.timeout,
+                write=30.0,
+                pool=30.0
+            )
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                logger.info(f"Prompt: \n{prompt}\n")
+                logger.info("Sending request to Ollama...")
+
                 response = await client.post(
                     f"{self.base_url}/api/generate",
-                    json=payload,
-                    timeout=self.timeout
+                    json=payload
                 )
+
+                logger.info("Received response from Ollama")
                 
                 if response.status_code == 200:
                     data = response.json()
                     return data.get("response", "")
                 else:
                     logger.error(f"Ollama error: {response.status_code} - {response.text}")
+                    print(f"Ollama generation failed: {response.status_code}")
                     raise Exception(f"Ollama generation failed: {response.status_code}")
         
         except httpx.ReadTimeout:

@@ -1,0 +1,18 @@
+{
+  "stb": {
+    "model": "G4",
+    "type": "Production",
+    "ip": "192.168.188.55"
+  },
+  "rcu": {
+    "type": "IRRX",
+    "ip": "192.168.1.109"
+  },
+  "smart_plug": {
+    "enabled": false,
+    "ip": ""
+  },
+  "capture_card": {
+    "hdmi_index": 2
+  }
+}

@@ -37,7 +37,7 @@ export const API_CONFIG = {
   TIMEOUT: 30000,
 
   // Extended timeout for LLM generation requests (matches backend 300s)
-  LLM_TIMEOUT: 310000,
+  LLM_TIMEOUT: 15000000,
 
   // Retry configuration
   RETRY_ATTEMPTS: 3,

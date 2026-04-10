@@ -27,9 +27,9 @@ export function DescriptionInput({
 }: DescriptionInputProps) {
   const [showCode, setShowCode] = useState(false);
 
-  // Auto-show the code editor when a script is generated
+  // Auto-show the code editor when a script is generated (including empty string from errors)
   useEffect(() => {
-    if (generatedCode) {
+    if (generatedCode !== null) {
       setShowCode(true);
     }
   }, [generatedCode]);

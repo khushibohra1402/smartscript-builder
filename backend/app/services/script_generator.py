@@ -1,7 +1,12 @@
 """
 Script Generator Service
 Orchestrates RAG Engine + Ollama + Code Guardrail
-Implements the complete flow from SRS Section 4.
+
+Staged Pipeline:
+  Stage 1: Retrieve context + few-shot examples via RAG
+  Stage 2: Generate script via Ollama with mega-prompt
+  Stage 3: Validate with quality guardrails
+  Stage 4: Auto-correct (1 retry) if validation fails
 """
 
 import time
@@ -15,17 +20,21 @@ from app.services.config_manager import config_manager
 from app.models.schemas import ScriptGenerationRequest, ScriptGenerationResponse, DeviceType
 
 
+MAX_RETRIES = 1  # Self-correction attempts
+
+
 class ScriptGenerator:
     """
     Main service for AI-powered test script generation.
     
-    Flow:
-    1. Load library index for the project
-    2. Search for relevant methods using RAG
-    3. Build mega-prompt with constraints + context + task
+    Pipeline:
+    1. Index library + example scripts
+    2. RAG search for relevant methods + few-shot examples
+    3. Build mega-prompt with constraints + context + examples + task
     4. Inject STB environment configuration when applicable
-    5. Generate code via Ollama
-    6. Validate with code guardrail
+    5. Generate code via Ollama (with extended context window)
+    6. Validate with quality guardrail
+    7. If validation fails, auto-correct once
     """
     
     async def generate(
@@ -39,33 +48,37 @@ class ScriptGenerator:
         """
         start_time = time.time()
         
-        # Step 1: Index library if path provided
+        # Stage 1: Index library if path provided
         if library_path:
             try:
                 await library_indexer.index_library(library_path, request.project_id)
             except Exception as e:
                 logger.warning(f"Library indexing failed: {e}")
         
-        # Step 2: Search for relevant context
-        context = library_indexer.search(request.description, top_k=10)
+        # Stage 1b: Search for relevant context
+        context =  library_indexer.search(request.description, top_k=4)
         context_names = [
             f"{doc.get('class_name', '')}.{doc.get('name', doc.get('signature', ''))}"
             for doc in context
         ]
         logger.info(f"RAG retrieved {len(context)} relevant documents")
+
+        # Stage 1c: Retrieve few-shot example scripts
+        example_scripts = library_indexer.get_example_scripts(request.description, top_k=3)
+        logger.info(f"Retrieved {len(example_scripts)} example scripts for few-shot prompting")
         
-        # Step 3: Build the mega-prompt
+        # Stage 2: Build the mega-prompt
         prompt = prompt_builder.build_prompt(
             user_description=request.description,
             library_context=context,
             device_type=request.device_type.value,
             platform=request.platform.value,
-            test_type=request.test_type.value
+            test_type=request.test_type.value,
+            example_scripts=example_scripts,
         )
         
-        # Step 3.5: Inject STB environment configuration
+        # Stage 2b: Inject STB environment configuration
         if request.device_type == DeviceType.STB and project_name:
-            # Persist the STB config from the request
             config_manager.update_stb_config(
                 project_name=project_name,
                 stb_model=request.stb_model,
@@ -81,12 +94,14 @@ class ScriptGenerator:
             prompt += f"\n\n{env_summary}\n"
             logger.info(f"Injected STB environment config into prompt for {project_name}")
         
-        # Step 4: Generate code via Ollama
+        # Stage 3: Generate code via Ollama
         try:
             response = await ollama_client.generate(
                 prompt=prompt,
-                temperature=0.3
+                temperature=0.3,
+                max_tokens=8192,
             )
+            logger.info(f"Prompt size: {len(prompt)} characters")
             script_code = code_guardrail.extract_code_from_response(response)
             
         except TimeoutError as e:
@@ -112,8 +127,38 @@ class ScriptGenerator:
                 generation_time_ms=(time.time() - start_time) * 1000
             )
         
-        # Step 5: Validate with guardrail
+        # Stage 4: Validate with quality guardrail
         is_valid, validation_errors = code_guardrail.validate(script_code)
+        logger.info(f"Initial validation: valid={is_valid}, errors={validation_errors}")
+
+        # Stage 5: Self-correction loop (1 retry if validation fails)
+        if not is_valid and script_code.strip():
+            for attempt in range(MAX_RETRIES):
+                logger.info(f"Self-correction attempt {attempt + 1}/{MAX_RETRIES}")
+                correction_prompt = prompt_builder.build_correction_prompt(
+                    original_script=script_code,
+                    validation_errors=validation_errors,
+                    user_description=request.description,
+                )
+                try:
+                    correction_response = await ollama_client.generate(
+                        prompt=correction_prompt,
+                        temperature=0.2,
+                        max_tokens=8192
+                    )
+                    corrected_code = code_guardrail.extract_code_from_response(correction_response)
+                    is_valid, validation_errors = code_guardrail.validate(corrected_code)
+                    
+                    if is_valid:
+                        script_code = corrected_code
+                        logger.info("Self-correction succeeded")
+                        break
+                    else:
+                        script_code = corrected_code
+                        logger.warning(f"Self-correction attempt {attempt + 1} still has errors: {validation_errors}")
+                except Exception as e:
+                    logger.error(f"Self-correction failed: {e}")
+                    break
         
         generation_time = (time.time() - start_time) * 1000
         logger.info(f"Script generated in {generation_time:.2f}ms, valid: {is_valid}")

@@ -21,21 +21,40 @@ class PromptBuilder:
     5. User task description
     """
 
-    SYSTEM_PROMPT = """You are an expert Python automation test script generator for an enterprise STB (Set-Top Box) testing platform.
+    SYSTEM_PROMPT = """You are a Senior Python Automation Architect specializing in enterprise STB automation testing.
 
-## ABSOLUTE RULES — VIOLATION = INVALID SCRIPT
-1. ONLY use objects and methods from the ALLOWED METHODS section below.
-2. NEVER import os, subprocess, sys, shutil, pathlib, socket, or requests.
-3. NEVER invent or hallucinate method names — if a method is not listed below, do NOT use it.
-4. Always follow the executeTestCase() → test_XXXX(extra) pattern shown in examples.
-5. Return ONLY Python code. No explanations, no markdown.
+Generate a production-grade automation test script using the enterprise automation framework.
 
-## CODE STRUCTURE RULES
-- Define executeTestCase() that returns (True/False, "message")
-- Use descriptive print() statements before each action
-- Check return values and return (False, "error msg") on failure
-- Use time.sleep() between UI interactions
-- Handle locked content with screen.isLiveTVLocked() + action.unlockContent()
+The generated script MUST strictly follow this architecture:
+
+1. Metadata header
+2. Import statement
+3. executeTestCase() function
+4. test_<TESTCASEID>() wrapper
+5. main execution block
+
+The script must use enterprise APIs such as:
+
+action.home()
+action.submenu()
+action.kinder()
+action.liveTV()
+action.tuneChannel()
+action.setResolution()
+stb_rcu.send()
+stb_rcu.sendmulti()
+tv.connect()
+tv.show()
+tv.saveVideo()
+
+Do NOT generate:
+driver.connect()
+driver.press()
+setup()
+teardown()
+test classes
+
+Use the structure shown in the example scripts.
 """
 
     @staticmethod
@@ -140,69 +159,158 @@ class PromptBuilder:
         examples_section = PromptBuilder.build_few_shot_section(example_scripts or [])
 
         # Section 3: Build complete prompt
-        prompt = f"""{PromptBuilder.SYSTEM_PROMPT}
+        prompt = f"""
+{PromptBuilder.SYSTEM_PROMPT}
 
 {schema_section}
 
 {examples_section}
 
-## CONSTRAINTS
-- Device Type: {device_type}
-- Platform: {platform}
-- Test Type: {test_type}
-- Import: from src.stb_lib.stb import *
-- Follow the executeTestCase() pattern from examples above
+==================================================
+TEST CONFIGURATION
+==================================================
 
-## TASK
+Device Type: {device_type}
+Platform: {platform}
+Test Type: {test_type}
+
+==================================================
+ALLOWED ENTERPRISE AUTOMATION METHODS
+==================================================
+
+Navigation / Actions
+- action.home()
+- action.submenu(menu_name)
+- action.kinder()
+- action.liveTV()
+- action.tuneChannel(channel_number)
+- action.setResolution(resolution)
+
+Remote Control
+- stb_rcu.send(button)
+- stb_rcu.sendmulti(commands, delay)
+
+TV Control
+- tv.connect()
+- tv.show()
+- tv.saveVideo(name)
+- tv.saveframe(name)
+- tv.closescreen()
+- tv.shutdown()
+
+Connection
+- stb.connect()
+
+ONLY use the methods above.
+DO NOT invent new APIs.
+
+==================================================
+TASK
+==================================================
+
 {user_description}
 
-## STEP-BY-STEP PLAN
-Write test steps as Python comments inside the function.
-Do NOT output reasoning outside the code.
+==================================================
+IMPLEMENTATION RULES
+==================================================
 
-## Generated Python Code:
-Write only the Python script below.
-Do not use markdown formatting.
+1. Follow the enterprise script structure exactly.
+2. Implement real logic inside executeTestCase().
+3. Each test step must contain executable automation code.
+4. Do NOT use placeholders like "condition".
+5. Do NOT invent APIs.
+6. Use time.sleep() where required for UI stability.
+7. Return False with an error message if validation fails.
+8. Return True when the test succeeds.
 
+==================================================
+UI INTERACTION RULES
+==================================================
 
-## REQUIRED SCRIPT TEMPLATE
+- Add time.sleep(2) after navigation actions.
+- Add time.sleep(1) after UI interactions.
+- Always verify UI state before performing the next action.
 
-The generated script MUST follow this structure exactly:
+==================================================
+REQUIRED SCRIPT TEMPLATE
+==================================================
+
+The generated script MUST follow this structure exactly.
 
 from src.stb_lib.stb import *
+import time
+
 
 def executeTestCase():
 
-    print("Starting test")
-
     # Step 1
-    if not condition:
-        return False, "error"
+    # implement automation step
 
     # Step 2
-    if not condition:
-        return False, "error"
+    # implement automation step
+
+    # Step 3
+    # implement automation step
 
     return True, ""
 
 
-Before writing the code:
+def test_generated(extra):
 
-1. Review the ALLOWED METHODS section
-2. Only use those methods
-3. If a required method is missing, skip the step instead of inventing one
+    testoutputname = __name__
+
+    try:
+
+        action.useVision(True)
+
+        if connection_type == "telnet":
+            assert stb.connect()
+
+        assert tv.connect()
+
+        tv.show()
+
+        tv.saveVideo(testoutputname)
+
+        status, msg = executeTestCase()
+
+        assert status, msg
+
+        print("Test Case Passed")
+
+    except Exception as e:
+
+        print("Test Case Failed")
+
+        tv.saveframe(testoutputname)
+
+        extra.append(extras.video("file:Videos\\" + testoutputname + ".mp4"))
+        extra.append(extras.image("file:Images\\" + testoutputname + ".png"))
+
+        raise
+
+    finally:
+
+        tv.closescreen()
+        tv.shutdown()
+        time.sleep(10)
 
 
+if __name__ == "__main__":
+    test_generated('')
 
-## UI INTERACTION RULES
+==================================================
+OUTPUT REQUIREMENTS
+==================================================
 
-- Add time.sleep(2) after navigation actions
-- Add time.sleep(1) after UI interactions
-- Always validate screen state before performing actions
+Generate ONLY the Python script.
 
+Do NOT:
+- explain the code
+- output markdown
+- output reasoning
 
-
-
+Return only valid executable Python code.
 """
 
         return prompt

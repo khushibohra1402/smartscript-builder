@@ -1,18 +1,20 @@
-# Author: Kaishik Gundu
-# Date: 16/09/2021
-
 """
-Sprint No: 99
-
-Test Case ID: NGTVTEST-2764
-
-Test Case Description: Play VOD on STB Client for free content
-
-Expected result: VOD is playing fine
-
-Notes: None
-
-OCR Engine - Tesseract
+Test Case: Play Free VOD Content
+Description:
+Validate that free Video-On-Demand (VOD) content can be played successfully on the STB client.
+Steps:
+- Navigate to free VOD content
+- Open the content details page
+- Select and play the VOD content
+- Handle PIN popup if displayed
+- Verify that playback starts successfully
+Expected:
+Free VOD content should play smoothly without errors.
+Preconditions:
+- Device should be connected and responsive
+- Free VOD content must be available for playback
+OCR:
+Tesseract
 """
 
 from src.stb_lib.stb import *

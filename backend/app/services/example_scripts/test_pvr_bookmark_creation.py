@@ -1,20 +1,21 @@
-# Author: Kaishik Gundu
-# Date: 16/08/2021
-
 """
-Sprint No: 97
-
-Test Case ID: NGTVTEST-1446
-
-Test Case Description: Create a bookmark for local PVR program
-
-Expected result: Local PVR bookmark is successfully added
-
-Notes: None
-
-OCR Engine - Google Vision
+Test Case: Create Bookmark for Local PVR Program
+Description:
+Validate that a bookmark can be successfully created for a locally recorded PVR program on the STB device.
+Steps:
+- Navigate to local PVR recordings
+- Select a recorded program
+- Create a bookmark at a specific playback point
+- Save the bookmark
+- Verify that the bookmark is added successfully
+Expected:
+Bookmark should be created and accessible within the PVR program.
+Preconditions:
+- At least one local PVR recording must be available
+- Device should be powered on and responsive
+OCR:
+Google Vision
 """
-
 from src.stb_lib.stb import *
 
 # Variable to hold the counter (to handle --count case)

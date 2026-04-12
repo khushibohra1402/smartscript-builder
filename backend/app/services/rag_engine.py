@@ -1,7 +1,6 @@
 """
 RAG Engine - Library Indexing and Context Injection
 Implements SRS Section 4: Script Generation Engine.
-
 Flow:
 1. Library Indexing - Scan custom enterprise libraries and create FAISS index
 2. Example Script Indexing - Index real automation scripts for few-shot learning
@@ -41,6 +40,12 @@ class LibraryIndexer:
         self.embedding_model = None
         self.index = None
         self.documents: List[Dict] = []
+
+        # Separate storage for scripts
+        self.script_docs: List[Dict] = []
+        self.script_index = None
+        self.script_embeddings = None
+
         self._initialized = False
     
     async def initialize(self):
@@ -73,28 +78,24 @@ class LibraryIndexer:
             tree = ast.parse(source)
             module_name = file_path.stem
             
-            for node in ast.walk(tree):
-                # Extract class definitions
+            for node in tree.body:  # FIXED (correct parsing)
                 if isinstance(node, ast.ClassDef):
                     class_doc = ast.get_docstring(node) or ""
-                    class_info = {
+                    documents.append({
                         "type": "class",
                         "name": node.name,
                         "module": module_name,
-                        "file_path": str(file_path),
                         "docstring": class_doc,
-                        "methods": [],
                         "full_text": f"class {node.name}: {class_doc}"
-                    }
-                    
-                    # Extract methods
+                    })
+
                     for item in node.body:
                         if isinstance(item, ast.FunctionDef):
                             method_doc = ast.get_docstring(item) or ""
-                            args = [arg.arg for arg in item.args.args if arg.arg != 'self']
+                            args = [a.arg for a in item.args.args if a.arg != "self"]
                             signature = f"{item.name}({', '.join(args)})"
-                            
-                            method_info = {
+
+                            documents.append({
                                 "type": "method",
                                 "name": item.name,
                                 "class_name": node.name,
@@ -102,20 +103,13 @@ class LibraryIndexer:
                                 "signature": signature,
                                 "docstring": method_doc,
                                 "full_text": f"{node.name}.{signature}: {method_doc}"
-                            }
-                            class_info["methods"].append(method_info)
-                            documents.append(method_info)
-                    
-                    documents.append(class_info)
-                
-                # Extract standalone functions
-                elif isinstance(node, ast.FunctionDef) and not any(
-                    isinstance(parent, ast.ClassDef) for parent in ast.walk(tree)
-                ):
+                            })
+
+                elif isinstance(node, ast.FunctionDef):
                     func_doc = ast.get_docstring(node) or ""
-                    args = [arg.arg for arg in node.args.args]
+                    args = [a.arg for a in node.args.args]
                     signature = f"{node.name}({', '.join(args)})"
-                    
+
                     documents.append({
                         "type": "function",
                         "name": node.name,
@@ -124,13 +118,12 @@ class LibraryIndexer:
                         "docstring": func_doc,
                         "full_text": f"{signature}: {func_doc}"
                     })
-        
-        except SyntaxError as e:
-            logger.warning(f"Syntax error parsing {file_path}: {e}")
+
         except Exception as e:
             logger.error(f"Error parsing {file_path}: {e}")
-        
+
         return documents
+
 
     def _parse_example_script(self, file_path: Path) -> List[Dict]:
         """
@@ -152,7 +145,7 @@ class LibraryIndexer:
                 "file_path": str(file_path),
                 "docstring": docstring,
                 "source_code": source,
-                "full_text": f"Example test script - {docstring}: {source[:500]}"
+                "full_text": f"Example test script - {docstring}: {source[:1500]}"
             })
         except Exception as e:
             logger.warning(f"Error parsing example script {file_path}: {e}")
@@ -188,7 +181,7 @@ class LibraryIndexer:
             logger.info(f"Indexed STB driver: {len(stb_docs)} documents")
 
         # Index example scripts for few-shot learning
-        examples_dir = Path("backend/examples/scripts")
+        examples_dir = Path(r"C:\Users\khushi.bohra\Smart-script\smartscript-builder\backend\app\services\example_scripts")
         if examples_dir.exists():
             example_files = list(examples_dir.glob("*.py"))
             for ef in example_files:
@@ -275,14 +268,55 @@ class LibraryIndexer:
         """
         Retrieve the most relevant example scripts for few-shot prompting.
         """
-        results = self.search(query, top_k=top_k * 3)
-        scripts = []
-        for doc in results:
-            if doc.get("type") == "example_script" and doc.get("source_code"):
-                scripts.append(doc["source_code"])
-                if len(scripts) >= top_k:
-                    break
-        return scripts
+
+        # Step 1: Filter only example scripts
+        script_docs = [d for d in self.documents if d.get("type") == "example_script"]
+
+        if not script_docs:
+            return []
+
+        # Step 2: If FAISS available → do semantic search ONLY on scripts
+        if FAISS_AVAILABLE and self.embedding_model:
+            texts = [doc["full_text"] for doc in script_docs]
+            embeddings = self.embedding_model.encode(texts)
+
+            # Create temporary FAISS index for scripts
+            dimension = embeddings.shape[1]
+            temp_index = faiss.IndexFlatL2(dimension)
+            temp_index.add(np.array(embeddings).astype('float32'))
+
+            # Encode query
+            query_embedding = self.embedding_model.encode([query])
+
+            distances, indices = temp_index.search(
+                np.array(query_embedding).astype('float32'),
+                min(top_k, len(script_docs))
+            )
+
+            scripts = []
+            for idx in indices[0]:
+                doc = script_docs[idx]
+                if doc.get("source_code"):
+                    scripts.append(doc["source_code"])
+
+            return scripts
+
+        else:
+            # Fallback: keyword search on scripts only
+            query_terms = query.lower().split()
+            scored_docs = []
+
+            for doc in script_docs:
+                text = doc["full_text"].lower()
+                score = sum(1 for term in query_terms if term in text)
+                if score > 0:
+                    doc_copy = doc.copy()
+                    doc_copy["score"] = score / len(query_terms)
+                    scored_docs.append(doc_copy)
+
+            scored_docs.sort(key=lambda x: x["score"], reverse=True)
+
+            return [d["source_code"] for d in scored_docs[:top_k] if d.get("source_code")]
 
 
 class PromptBuilder:

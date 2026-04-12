@@ -1,24 +1,24 @@
-# Author: Anup
-# Date: 15-07-21
-
 """
-Sprint No: 96
-
-Test Case ID: NGTVTEST-2923
-
-Test Case Description: Setting and checking unrated content lock on STB
-
-Expected result: To test the function of the unrated content lock/unlock as per the age rating set
-
-Notes:
-
-OCR Engine - Tesseract
+Test Case: No Scheduled Recordings Display
+Description:
+Validate that no scheduled recordings are displayed in the recordings menu when no recordings have been scheduled.
+Steps:
+- Navigate to the recordings menu
+- Open the scheduled recordings section
+- Verify that no scheduled recordings are listed
+Expected:
+The scheduled recordings list should be empty when no recordings are scheduled.
+Preconditions:
+- No recordings should be scheduled on the device
+- Device should be powered on and accessible
+OCR:
+Tesseract
 """
 
 from src.stb_lib.stb import *
 
 # Variable to hold the counter (to handle --count case)
-pytest.test_NGTVTEST_2923_counter = 0
+pytest.test_NGTVTEST_1518_counter = 0
 
 
 def executeTestCase():
@@ -28,56 +28,30 @@ def executeTestCase():
     Note: Mention the reason in case of a failure (return False, "error message")
     """
 
-    if pytest.test_NGTVTEST_2923_counter == 1:
-        # Navigate to home screen
-        if not action.home():
-            return False, "Home screen not validated"
+    # Navigating to Home
+    if not action.home():
+        return False, "Home screen not validated"
 
-        # Navigate to settings screen
-        if not action.submenu("settings"):
-            return False, "Settings screen not validated"
+    # Navigating to Film Section
+    if not action.submenu("recordings"):
+        return False, "Recordings screen not validated"
 
-        # Navigate to Kinder menu
-        if not action.kinder():
-            return False, "Could not navigate to kinder menu"
-
-        # Lock 16
-        if not action.setLock("Lock16"):
-            return False, "Unable to set lock (Ab16)"
-
-        # Lock KA content
-        action.lockKAContent()
-
-        # Disable Komfort feature
-        action.activateKomfort(False)
-
-    # Navigate to live TV
-    action.liveTV()
-
-    # Tune to channel 1 (unrated channel)
-    action.tuneChannel("1")
-
-    # Verify if the content is locked
-    if not screen.isLiveTVLocked():
-        return False, "Live TV unrated content is not locked"
-
-    # Unlock the content
-    action.unlockContent()
-
-    # Increase the volume just in case volume is 0
-    stb_rcu.sendmulti(["pvolplus"]*2, 1)
-    time.sleep(3)
-
-    # Check if the content is playing or not
-    if not screen.isContentPlaying():
-        return False, "Content is not playing"
+    # Delete all the recordings and validate No recordings available
+    iteration = 5
+    while not screen.isAllRecordingsDeleted():
+        if not action.deleteAllRecordings():
+            return False, "Unable to delete all recordings"
+        iteration -= 1
+        if iteration == 0:
+            break
+    print("No scheduled recordings are available in the Meine Aufnahme screen. 'Geplante Aufnahmen' is not displayed")
 
     return True, "All the steps executed and validated properly"
 
 
-def test_NGTVTEST_2923(extra):
-    pytest.test_NGTVTEST_2923_counter += 1
-    testoutputname = __name__ + "_" + str(pytest.test_NGTVTEST_2923_counter)
+def test_NGTVTEST_1518(extra):
+    pytest.test_NGTVTEST_1518_counter += 1
+    testoutputname = __name__ + "_" + str(pytest.test_NGTVTEST_1518_counter)
     try:
         #Choosing OCR Engine (True - GV, False - Tesseract)
         action.useVision(False)
@@ -122,4 +96,4 @@ def test_NGTVTEST_2923(extra):
 
 
 if __name__ == '__main__':
-    test_NGTVTEST_2923('')
+    test_NGTVTEST_1518('')

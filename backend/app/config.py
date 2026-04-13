@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # Ollama (Local LLM)
     OLLAMA_HOST : str = "http://127.0.0.1:11434"
-    OLLAMA_MODEL : str = "deepseek-coder:6.7b"  # or llama3:7b
+    OLLAMA_MODEL : str = "mistral:7b"  # or llama3:7b
     OLLAMA_TIMEOUT: int = 1500  # seconds
     
     # RAG Engine

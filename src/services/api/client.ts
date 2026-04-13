@@ -45,6 +45,11 @@ class ApiClient {
     const timeoutId = setTimeout(() => controller.abort(), customTimeout || this.timeout);
 
     try {
+      console.debug('[API REQUEST]', {
+        url: `${this.baseUrl}${endpoint}`,
+        method: options.method || 'GET',
+        body: options.body ? JSON.parse(options.body as string) : undefined,
+      });
       const response = await fetch(`${this.baseUrl}${endpoint}`, {
         ...options,
         signal: controller.signal,
@@ -70,10 +75,20 @@ class ApiClient {
 
       // Handle empty responses
       const text = await response.text();
+      console.debug('[API RESPONSE]', {
+        url: endpoint,
+        status: response.status,
+        response: text ? JSON.parse(text) : null,
+      });
       if (!text) return {} as T;
       
       return JSON.parse(text) as T;
     } catch (error) {
+      console.error('[API ERROR]', {
+        url: endpoint,
+        method: options.method,
+        error: error instanceof Error ? error.message : error,
+      });
       clearTimeout(timeoutId);
       
       if (error instanceof ApiRequestError) {

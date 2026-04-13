@@ -17,6 +17,7 @@ from loguru import logger
 from app.services.rag_engine import library_indexer, prompt_builder, code_guardrail
 from app.services.ollama_client import ollama_client
 from app.services.config_manager import config_manager
+from app.services.llm_formatter import structure_test_scenario
 from app.models.schemas import ScriptGenerationRequest, ScriptGenerationResponse, DeviceType
 
 
@@ -48,6 +49,10 @@ class ScriptGenerator:
         """
         start_time = time.time()
         
+        # Stage 0: Structure user input via lightweight LLM
+        structured_description = await structure_test_scenario(request.description)
+        logger.info(f"Structured description:\n{structured_description[:300]}")
+        
         # Stage 1: Index library if path provided
         if library_path:
             try:
@@ -55,8 +60,8 @@ class ScriptGenerator:
             except Exception as e:
                 logger.warning(f"Library indexing failed: {e}")
         
-        # Stage 1b: Search for relevant context
-        context =  library_indexer.search(request.description, top_k=4)
+        # Stage 1b: Search for relevant context (use structured description for better RAG hits)
+        context = library_indexer.search(structured_description, top_k=4)
         context_names = [
             f"{doc.get('class_name', '')}.{doc.get('name', doc.get('signature', ''))}"
             for doc in context
@@ -69,7 +74,7 @@ class ScriptGenerator:
         
         # Stage 2: Build the mega-prompt
         prompt = prompt_builder.build_prompt(
-            user_description=request.description,
+            user_description=structured_description,
             library_context=context,
             device_type=request.device_type.value,
             platform=request.platform.value,

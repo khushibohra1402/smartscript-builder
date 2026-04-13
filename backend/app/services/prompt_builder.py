@@ -154,17 +154,17 @@ Use the structure shown in the example scripts.
         """
         # Section 1: Library schema
         schema_section = PromptBuilder.build_library_schema(library_context)
+        print(schema_section);
 
         # Section 2: Few-shot examples
         examples_section = PromptBuilder.build_few_shot_section(example_scripts or [])
+        print(schema_section);
 
         # Section 3: Build complete prompt
         prompt = f"""
 {PromptBuilder.SYSTEM_PROMPT}
 
 {schema_section}
-
-{examples_section}
 
 ==================================================
 TEST CONFIGURATION

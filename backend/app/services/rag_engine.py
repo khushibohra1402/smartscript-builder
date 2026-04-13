@@ -1,17 +1,16 @@
 """
-RAG Engine - Library Indexing and Context Injection
+RAG Engine - Library Indexing, Prompt Construction, and Code Guardrail.
 Implements SRS Section 4: Script Generation Engine.
+
 Flow:
-1. Library Indexing - Scan custom enterprise libraries and create FAISS index
-2. Example Script Indexing - Index real automation scripts for few-shot learning
-3. Prompt Construction - Build mega-prompt with constraints + context + examples + task
-4. Code Generation - Send to Ollama and receive Python script
-5. Quality Guardrail - Validate output for production readiness
+1. Library Indexing - AST-parse enterprise libs → FAISS vector index
+2. Example Script Indexing - Index real scripts for few-shot learning
+3. Prompt Construction - Lean mega-prompt (context + examples + task)
+4. Code Guardrail - AST-based quality + security validation
 """
 
 import ast
 import re
-import hashlib
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
@@ -29,409 +28,316 @@ except ImportError:
 from app.config import settings
 
 
+# ---------------------------------------------------------------------------
+# Resolve example scripts directory relative to this file (cross-platform)
+# ---------------------------------------------------------------------------
+_THIS_DIR = Path(__file__).resolve().parent
+_EXAMPLES_DIR = _THIS_DIR / "example_scripts"
+
+
 class LibraryIndexer:
     """
-    Indexes custom enterprise libraries for RAG retrieval.
-    Creates embeddings of method signatures and docstrings.
-    Also indexes example scripts for few-shot learning.
+    Indexes enterprise Python libraries + example scripts into a FAISS index
+    for semantic retrieval during prompt construction.
     """
-    
+
     def __init__(self):
         self.embedding_model = None
         self.index = None
         self.documents: List[Dict] = []
-
-        # Separate storage for scripts
-        self.script_docs: List[Dict] = []
-        self.script_index = None
-        self.script_embeddings = None
-
         self._initialized = False
-    
+
+    # ------------------------------------------------------------------
+    # Initialisation
+    # ------------------------------------------------------------------
+
     async def initialize(self):
-        """Initialize the embedding model."""
         if self._initialized:
             return
-        
         if FAISS_AVAILABLE:
             try:
                 self.embedding_model = SentenceTransformer(settings.EMBEDDING_MODEL)
                 self._initialized = True
-                logger.info(f"Initialized embedding model: {settings.EMBEDDING_MODEL}")
+                logger.info(f"Embedding model loaded: {settings.EMBEDDING_MODEL}")
             except Exception as e:
                 logger.error(f"Failed to load embedding model: {e}")
-                self._initialized = False
         else:
-            self._initialized = True  # Use keyword fallback
-    
-    def _parse_python_file(self, file_path: Path) -> List[Dict]:
-        """
-        Parse a Python file and extract classes, methods, and docstrings.
-        Returns structured documents for indexing.
-        """
-        documents = []
-        
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                source = f.read()
-            
-            tree = ast.parse(source)
-            module_name = file_path.stem
-            
-            for node in tree.body:  # FIXED (correct parsing)
-                if isinstance(node, ast.ClassDef):
-                    class_doc = ast.get_docstring(node) or ""
-                    documents.append({
-                        "type": "class",
-                        "name": node.name,
-                        "module": module_name,
-                        "docstring": class_doc,
-                        "full_text": f"class {node.name}: {class_doc}"
-                    })
+            self._initialized = True  # keyword fallback
 
+    # ------------------------------------------------------------------
+    # Parsing helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_python_file(file_path: Path) -> List[Dict]:
+        """AST-parse a Python file → list of class/method/function documents."""
+        documents: List[Dict] = []
+        try:
+            source = file_path.read_text(encoding="utf-8")
+            tree = ast.parse(source)
+            module = file_path.stem
+
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef):
+                    cls_doc = ast.get_docstring(node) or ""
+                    documents.append({
+                        "type": "class", "name": node.name,
+                        "module": module, "docstring": cls_doc,
+                        "full_text": f"class {node.name}: {cls_doc}",
+                    })
                     for item in node.body:
                         if isinstance(item, ast.FunctionDef):
-                            method_doc = ast.get_docstring(item) or ""
+                            mdoc = ast.get_docstring(item) or ""
                             args = [a.arg for a in item.args.args if a.arg != "self"]
-                            signature = f"{item.name}({', '.join(args)})"
-
+                            sig = f"{item.name}({', '.join(args)})"
                             documents.append({
-                                "type": "method",
-                                "name": item.name,
-                                "class_name": node.name,
-                                "module": module_name,
-                                "signature": signature,
-                                "docstring": method_doc,
-                                "full_text": f"{node.name}.{signature}: {method_doc}"
+                                "type": "method", "name": item.name,
+                                "class_name": node.name, "module": module,
+                                "signature": sig, "docstring": mdoc,
+                                "full_text": f"{node.name}.{sig}: {mdoc}",
                             })
 
                 elif isinstance(node, ast.FunctionDef):
-                    func_doc = ast.get_docstring(node) or ""
+                    fdoc = ast.get_docstring(node) or ""
                     args = [a.arg for a in node.args.args]
-                    signature = f"{node.name}({', '.join(args)})"
-
+                    sig = f"{node.name}({', '.join(args)})"
                     documents.append({
-                        "type": "function",
-                        "name": node.name,
-                        "module": module_name,
-                        "signature": signature,
-                        "docstring": func_doc,
-                        "full_text": f"{signature}: {func_doc}"
+                        "type": "function", "name": node.name,
+                        "module": module, "signature": sig,
+                        "docstring": fdoc,
+                        "full_text": f"{sig}: {fdoc}",
                     })
-
         except Exception as e:
             logger.error(f"Error parsing {file_path}: {e}")
-
         return documents
 
-
-    def _parse_example_script(self, file_path: Path) -> List[Dict]:
-        """
-        Parse a complete example test script for few-shot indexing.
-        Extracts the full script content and its docstring as the description.
-        """
-        documents = []
+    @staticmethod
+    def _parse_example_script(file_path: Path) -> List[Dict]:
+        """Parse a complete example script for few-shot indexing."""
         try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                source = f.read()
-
+            source = file_path.read_text(encoding="utf-8")
             tree = ast.parse(source)
             docstring = ast.get_docstring(tree) or file_path.stem.replace("_", " ")
-
-            documents.append({
+            return [{
                 "type": "example_script",
                 "name": file_path.stem,
                 "module": "examples",
                 "file_path": str(file_path),
                 "docstring": docstring,
                 "source_code": source,
-                "full_text": f"Example test script - {docstring}: {source[:1500]}"
-            })
+                "full_text": f"Example - {docstring}: {source[:1500]}",
+            }]
         except Exception as e:
             logger.warning(f"Error parsing example script {file_path}: {e}")
+            return []
 
-        return documents
+    # ------------------------------------------------------------------
+    # Indexing
+    # ------------------------------------------------------------------
 
     async def index_library(self, library_path: Path, project_id: str) -> Dict:
-        """
-        Index an entire library folder plus example scripts.
-        Returns metadata about the indexing process.
-        """
         await self.initialize()
-        
         library_path = Path(library_path)
         if not library_path.exists():
             raise ValueError(f"Library path does not exist: {library_path}")
-        
-        # Find all Python files in library
+
         python_files = list(library_path.rglob("*.py"))
         logger.info(f"Found {len(python_files)} Python files in {library_path}")
-        
-        # Parse all library files
-        all_documents = []
-        for py_file in python_files:
-            docs = self._parse_python_file(py_file)
-            all_documents.extend(docs)
 
-        # Also index the STB driver
-        stb_driver_path = Path("backend/libs/stb/stb_driver.py")
-        if stb_driver_path.exists():
-            stb_docs = self._parse_python_file(stb_driver_path)
-            all_documents.extend(stb_docs)
-            logger.info(f"Indexed STB driver: {len(stb_docs)} documents")
+        all_docs: List[Dict] = []
+        for pf in python_files:
+            all_docs.extend(self._parse_python_file(pf))
 
-        # Index example scripts for few-shot learning
-        examples_dir = Path(r"C:\Users\khushi.bohra\Smart-script\smartscript-builder\backend\app\services\example_scripts")
-        if examples_dir.exists():
-            example_files = list(examples_dir.glob("*.py"))
-            for ef in example_files:
-                example_docs = self._parse_example_script(ef)
-                all_documents.extend(example_docs)
-            logger.info(f"Indexed {len(example_files)} example scripts")
+        # Also index STB driver if present
+        stb_driver = Path("backend/libs/stb/stb_driver.py")
+        if stb_driver.exists():
+            stb_docs = self._parse_python_file(stb_driver)
+            all_docs.extend(stb_docs)
+            logger.info(f"Indexed STB driver: {len(stb_docs)} docs")
 
-        self.documents = all_documents
-        logger.info(f"Extracted {len(all_documents)} documents from library + examples")
-        
-        # Create FAISS index if available
-        if FAISS_AVAILABLE and self.embedding_model:
-            texts = [doc["full_text"] for doc in all_documents]
-            if texts:
-                embeddings = self.embedding_model.encode(texts)
-                
-                # Create FAISS index
-                dimension = embeddings.shape[1]
-                self.index = faiss.IndexFlatL2(dimension)
-                self.index.add(np.array(embeddings).astype('float32'))
-                
-                # Save index
-                index_path = settings.FAISS_INDEX_PATH / f"{project_id}.index"
-                faiss.write_index(self.index, str(index_path))
-                logger.info(f"Saved FAISS index to {index_path}")
-        
+        # Index example scripts (cross-platform path)
+        if _EXAMPLES_DIR.exists():
+            for ef in _EXAMPLES_DIR.glob("*.py"):
+                all_docs.extend(self._parse_example_script(ef))
+            logger.info(f"Indexed example scripts from {_EXAMPLES_DIR}")
+
+        self.documents = all_docs
+        logger.info(f"Total documents indexed: {len(all_docs)}")
+
+        # Build FAISS index
+        if FAISS_AVAILABLE and self.embedding_model and all_docs:
+            texts = [d["full_text"] for d in all_docs]
+            embeddings = self.embedding_model.encode(texts)
+            dim = embeddings.shape[1]
+            self.index = faiss.IndexFlatL2(dim)
+            self.index.add(np.array(embeddings, dtype="float32"))
+
+            idx_path = settings.FAISS_INDEX_PATH / f"{project_id}.index"
+            faiss.write_index(self.index, str(idx_path))
+            logger.info(f"FAISS index saved: {idx_path}")
+
         return {
             "project_id": project_id,
             "library_path": str(library_path),
             "files_indexed": len(python_files),
-            "documents_extracted": len(all_documents),
+            "documents_extracted": len(all_docs),
             "indexed_at": datetime.utcnow().isoformat(),
-            "classes": len([d for d in all_documents if d["type"] == "class"]),
-            "methods": len([d for d in all_documents if d["type"] == "method"]),
-            "functions": len([d for d in all_documents if d["type"] == "function"]),
-            "example_scripts": len([d for d in all_documents if d["type"] == "example_script"]),
+            "classes": sum(1 for d in all_docs if d["type"] == "class"),
+            "methods": sum(1 for d in all_docs if d["type"] == "method"),
+            "functions": sum(1 for d in all_docs if d["type"] == "function"),
+            "example_scripts": sum(1 for d in all_docs if d["type"] == "example_script"),
         }
-    
+
+    # ------------------------------------------------------------------
+    # Search
+    # ------------------------------------------------------------------
+
     def search(self, query: str, top_k: int = 10) -> List[Dict]:
-        """
-        Search the indexed library for relevant methods/classes.
-        Uses FAISS if available, otherwise keyword matching.
-        """
         if not self.documents:
             return []
-        
+
         if FAISS_AVAILABLE and self.index and self.embedding_model:
-            # Vector search
-            query_embedding = self.embedding_model.encode([query])
-            distances, indices = self.index.search(
-                np.array(query_embedding).astype('float32'), 
-                min(top_k, len(self.documents))
-            )
-            
-            results = []
-            seen_texts = set()
-            for idx, dist in zip(indices[0], distances[0]):
+            qe = self.embedding_model.encode([query])
+            dists, idxs = self.index.search(np.array(qe, dtype="float32"), min(top_k, len(self.documents)))
+            seen, results = set(), []
+            for idx, dist in zip(idxs[0], dists[0]):
                 if idx < len(self.documents):
                     doc = self.documents[idx].copy()
-                    # Deduplicate by full_text
-                    if doc["full_text"] not in seen_texts:
+                    if doc["full_text"] not in seen:
                         doc["score"] = float(1 / (1 + dist))
                         results.append(doc)
-                        seen_texts.add(doc["full_text"])
-            
+                        seen.add(doc["full_text"])
             return results
-        else:
-            # Keyword matching fallback
-            query_terms = query.lower().split()
-            scored_docs = []
-            
-            for doc in self.documents:
-                text = doc["full_text"].lower()
-                score = sum(1 for term in query_terms if term in text)
-                if score > 0:
-                    doc_copy = doc.copy()
-                    doc_copy["score"] = score / len(query_terms)
-                    scored_docs.append(doc_copy)
-            
-            scored_docs.sort(key=lambda x: x["score"], reverse=True)
-            return scored_docs[:top_k]
 
-    def get_example_scripts(self, query: str, top_k: int = 3) -> List[str]:
-        """
-        Retrieve the most relevant example scripts for few-shot prompting.
-        """
+        # Keyword fallback
+        terms = query.lower().split()
+        scored = []
+        for doc in self.documents:
+            txt = doc["full_text"].lower()
+            sc = sum(1 for t in terms if t in txt)
+            if sc > 0:
+                d = doc.copy()
+                d["score"] = sc / len(terms)
+                scored.append(d)
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:top_k]
 
-        # Step 1: Filter only example scripts
-        script_docs = [d for d in self.documents if d.get("type") == "example_script"]
-
-        if not script_docs:
+    def get_example_scripts(self, query: str, top_k: int = 3) -> List[Dict[str, str]]:
+        """Return the most relevant example scripts for few-shot prompting."""
+        scripts = [d for d in self.documents if d.get("type") == "example_script"]
+        if not scripts:
             return []
 
-        # Step 2: If FAISS available → do semantic search ONLY on scripts
         if FAISS_AVAILABLE and self.embedding_model:
-            texts = [doc["full_text"] for doc in script_docs]
-            embeddings = self.embedding_model.encode(texts)
+            texts = [d["full_text"] for d in scripts]
+            embs = self.embedding_model.encode(texts)
+            dim = embs.shape[1]
+            tmp = faiss.IndexFlatL2(dim)
+            tmp.add(np.array(embs, dtype="float32"))
+            qe = self.embedding_model.encode([query])
+            _, idxs = tmp.search(np.array(qe, dtype="float32"), min(top_k, len(scripts)))
+            return [
+                {"description": scripts[i].get("docstring", "Example"), "code": scripts[i]["source_code"]}
+                for i in idxs[0] if scripts[i].get("source_code")
+            ]
 
-            # Create temporary FAISS index for scripts
-            dimension = embeddings.shape[1]
-            temp_index = faiss.IndexFlatL2(dimension)
-            temp_index.add(np.array(embeddings).astype('float32'))
+        # Keyword fallback
+        terms = query.lower().split()
+        scored = []
+        for d in scripts:
+            sc = sum(1 for t in terms if t in d["full_text"].lower())
+            if sc > 0:
+                scored.append((sc, d))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [
+            {"description": d.get("docstring", "Example"), "code": d["source_code"]}
+            for _, d in scored[:top_k] if d.get("source_code")
+        ]
 
-            # Encode query
-            query_embedding = self.embedding_model.encode([query])
 
-            distances, indices = temp_index.search(
-                np.array(query_embedding).astype('float32'),
-                min(top_k, len(script_docs))
-            )
-
-            scripts = []
-            for idx in indices[0]:
-                doc = script_docs[idx]
-                if doc.get("source_code"):
-                    scripts.append(doc["source_code"])
-
-            return scripts
-
-        else:
-            # Fallback: keyword search on scripts only
-            query_terms = query.lower().split()
-            scored_docs = []
-
-            for doc in script_docs:
-                text = doc["full_text"].lower()
-                score = sum(1 for term in query_terms if term in text)
-                if score > 0:
-                    doc_copy = doc.copy()
-                    doc_copy["score"] = score / len(query_terms)
-                    scored_docs.append(doc_copy)
-
-            scored_docs.sort(key=lambda x: x["score"], reverse=True)
-
-            return [d["source_code"] for d in scored_docs[:top_k] if d.get("source_code")]
-
+# ═══════════════════════════════════════════════════════════════════════════
+# PROMPT BUILDER
+# ═══════════════════════════════════════════════════════════════════════════
 
 class PromptBuilder:
     """
-    Constructs the mega-prompt for Ollama with:
-    1. Strict constraints (enforce real code, no placeholders)
-    2. Library context (relevant methods from RAG)
-    3. Few-shot examples (real enterprise scripts)
-    4. Task (user's natural language description)
+    Builds a lean, high-signal prompt for Ollama.
+    Token budget strategy:
+      - System rules: ~300 tokens (compact, no duplication)
+      - RAG schema: dynamic (only retrieved methods)
+      - Few-shot: 1-2 executeTestCase() bodies (~400 tokens each)
+      - Template: shown once, not repeated
+      - Task: user description verbatim
     """
-    
-    SYSTEM_PROMPT = """You are a Senior Python Automation Architect specializing in enterprise STB automation testing.
 
-Generate a production-grade automation test script using the enterprise automation framework.
+    # Compact system instruction — every sentence earns its tokens
+    SYSTEM_PROMPT = (
+        "You are an expert STB automation engineer. "
+        "Generate ONLY valid, executable Python. No markdown, no explanations. "
+        "Use ONLY the APIs listed below — never invent methods. "
+        "Every function must contain real logic — no `pass`, no placeholders. "
+        "Return (True, msg) on success, (False, msg) on failure."
+    )
 
-Structure must include:
+    # ── Schema builder ─────────────────────────────────────────────────
 
-1. Metadata header (author, description, prerequisites)
-2. Imports
-3. executeTestCase() → core logic
-4. test_<name>() → wrapper
-5. main block
-
-You may include:
-- logging (print)
-- global variables
-- reporting logic (Excel, file writing)
-- assertions
-
-The script must use enterprise APIs such as:
-
-action.home()
-action.submenu()
-action.kinder()
-action.liveTV()
-action.tuneChannel()
-action.setResolution()
-stb_rcu.send()
-stb_rcu.sendmulti()
-tv.connect()
-tv.show()
-tv.saveVideo()
-
-Do NOT generate:
-driver.connect()
-driver.press()
-setup()
-teardown()
-test classes
-
-Use the structure shown in the example scripts.
-"""
     @staticmethod
     def build_library_schema(library_context: List[Dict]) -> str:
-        """
-        Build a structured method registry from RAG-retrieved documents.
-        Groups methods by class for clarity.
-        """
         if not library_context:
-            return "No library methods available."
+            return ""
 
-        # Group by class/object name
         groups: Dict[str, List[str]] = {}
         standalone: List[str] = []
 
         for doc in library_context:
-            doc_type = doc.get("type", "")
-            if doc_type == "method":
-                class_name = doc.get("class_name", "unknown")
+            dtype = doc.get("type", "")
+            if dtype == "method":
+                cls = doc.get("class_name", "unknown")
                 sig = doc.get("signature", doc.get("name", ""))
-                docstring = doc.get("docstring", "")[:120]
-                entry = f"  - {sig}: {docstring}" if docstring else f"  - {sig}"
-                groups.setdefault(class_name, []).append(entry)
-            elif doc_type == "class":
-                class_name = doc.get("name", "unknown")
-                docstring = doc.get("docstring", "")[:120]
-                groups.setdefault(class_name, [])
-                if docstring:
-                    groups[class_name].insert(0, f"  # {docstring}")
-            elif doc_type == "function":
+                ds = doc.get("docstring", "")[:100]
+                groups.setdefault(cls, []).append(f"  {sig}  # {ds}" if ds else f"  {sig}")
+            elif dtype == "class":
+                cls = doc.get("name", "unknown")
+                ds = doc.get("docstring", "")[:100]
+                groups.setdefault(cls, [])
+                if ds:
+                    groups[cls].insert(0, f"  # {ds}")
+            elif dtype == "function":
                 sig = doc.get("signature", doc.get("name", ""))
-                docstring = doc.get("docstring", "")[:80]
-                standalone.append(f"- {sig}: {docstring}" if docstring else f"- {sig}")
+                ds = doc.get("docstring", "")[:80]
+                standalone.append(f"{sig}  # {ds}" if ds else sig)
 
-        lines = ["## ALLOWED METHODS (use ONLY these)"]
+        lines = ["[RETRIEVED API REFERENCE]"]
         for cls, methods in sorted(groups.items()):
-            lines.append(f"\n### {cls}")
+            lines.append(f"\n{cls}:")
             lines.extend(methods)
-
         if standalone:
-            lines.append("\n### Standalone Functions")
+            lines.append("\nStandalone:")
             lines.extend(standalone)
-
         return "\n".join(lines)
+
+    # ── Few-shot builder ───────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_execute_function(code: str) -> str:
+        if not code:
+            return ""
+        m = re.search(r"(def\s+executeTestCase\s*\(.*?\):[\s\S]*?)(?=\n\ndef |\Z)", code)
+        return m.group(1).strip() if m else ""
 
     @staticmethod
     def build_few_shot_section(example_scripts: List[Dict[str, str]]) -> str:
-        """
-        Build few-shot examples section from loaded example scripts.
-        Each entry: {"description": "...", "code": "..."}
-        """
         if not example_scripts:
             return ""
+        parts = ["[EXAMPLES — replicate this pattern]"]
+        for i, ex in enumerate(example_scripts[:2], 1):
+            body = PromptBuilder._extract_execute_function(ex.get("code", ""))
+            if body:
+                desc = ex.get("description", f"Example {i}")
+                parts.append(f"\n# Example {i}: {desc}\n{body}")
+        return "\n".join(parts)
 
-        lines = ["## EXAMPLE SCRIPTS (follow this pattern exactly)"]
-        for i, ex in enumerate(example_scripts[:2], 1):  # Max 2 examples to save tokens
-            desc = ex.get("description", f"Example {i}")
-            code = ex.get("code", "")
-            # Only include the executeTestCase function to save context
-            exec_func = PromptBuilder._extract_execute_function(code)
-            if exec_func:
-                lines.append(f"\n### Example {i}: {desc}")
-                lines.append(f"```python\n{exec_func}\n```")
-
-        return "\n".join(lines)
+    # ── Main prompt ────────────────────────────────────────────────────
 
     @staticmethod
     def build_prompt(
@@ -440,347 +346,211 @@ Use the structure shown in the example scripts.
         device_type: str,
         platform: str,
         test_type: str,
-        example_scripts: Optional[List[Dict[str, str]]] = None
+        example_scripts: Optional[List[Dict[str, str]]] = None,
     ) -> str:
-        """
-        Build the complete structured mega-prompt.
 
-        Sections:
-        1. SYSTEM PROMPT (rules)
-        2. ALLOWED METHODS (library schema)
-        3. EXAMPLE SCRIPTS (few-shot)
-        4. CONSTRAINTS (device/platform/type)
-        5. TASK (user description)
-        """
-        # Section 1: Library schema
-        schema_section = PromptBuilder.build_library_schema(library_context)
+        schema = PromptBuilder.build_library_schema(library_context)
+        examples = PromptBuilder.build_few_shot_section(example_scripts or [])
 
-        # Section 2: Few-shot examples
-        examples_section = PromptBuilder.build_few_shot_section(example_scripts or [])
+        prompt = f"""{PromptBuilder.SYSTEM_PROMPT}
 
-        # Section 3: Build complete prompt
-        prompt = f"""
-{PromptBuilder.SYSTEM_PROMPT}
+{schema}
 
-{schema_section}
+[ALLOWED APIs — use ONLY these]
+action: home(), submenu(name), kinder(), liveTV(), tuneChannel(ch), setResolution(res)
+stb_rcu: send(button), sendmulti(commands, delay)
+tv: connect(), show(), saveVideo(name), saveframe(name), closescreen(), shutdown()
+stb: connect()
+screen: image_to_text(), read_text() — for UI validation only
 
-{examples_section}
 
-==================================================
-TEST CONFIGURATION
-==================================================
+[CONFIG] device={device_type} | platform={platform} | test_type={test_type}
 
-Device Type: {device_type}
-Platform: {platform}
-Test Type: {test_type}
-
-==================================================
-ALLOWED ENTERPRISE AUTOMATION METHODS
-==================================================
-
-Navigation / Actions
-- action.home()
-- action.submenu(menu_name)
-- action.kinder()
-- action.liveTV()
-- action.tuneChannel(channel_number)
-- action.setResolution(resolution)
-
-Remote Control
-- stb_rcu.send(button)
-- stb_rcu.sendmulti(commands, delay)
-
-TV Control
-- tv.connect()
-- tv.show()
-- tv.saveVideo(name)
-- tv.saveframe(name)
-- tv.closescreen()
-- tv.shutdown()
-
-Connection
-- stb.connect()
-
-Use enterprise automation APIs available in the framework, including:
-- action.*, stb_rcu.*, tv.*
-- screen.*, OCR utilities, frame comparison utilities
-- OpenCV (cv2) where required for frame validation
-
-Prefer existing APIs, but you may combine them creatively.
-==================================================
-TASK
-==================================================
-
+[TASK]
 {user_description}
 
-==================================================
-IMPLEMENTATION RULES
-==================================================
+[RULES]
+1. Start from known state (action.home()).
+2. time.sleep(2) after navigation, time.sleep(1) after RCU commands.
+3. Validate UI state with screen.* before proceeding.
+4. Return (True, "msg") or (False, "error reason").
+5. Preconditions checked at top of executeTestCase().
 
-1. Follow the enterprise script structure exactly.
-2. Implement real logic inside executeTestCase().
-3. Each test step must contain executable automation code.
-4. Do NOT use placeholders like "condition".
-5. You may use global variables (e.g., result dictionaries) to store intermediate data such as timing metrics.
-6. Use time.sleep() where required for UI stability.
-7. Return False with an error message if validation fails.
-8. Return True when the test succeeds.
-
-==================================================
-UI INTERACTION RULES
-==================================================
-
-- Add time.sleep(2) after navigation actions.
-- Add time.sleep(1) after UI interactions.
-- Always verify UI state before performing the next action.
-
-==================================================
-REQUIRED SCRIPT TEMPLATE
-==================================================
-
-The generated script MUST follow this structure exactly.
+[TEMPLATE — output must match exactly]
 
 from src.stb_lib.stb import *
 import time
 
-
 def executeTestCase():
-
-    # Step 1
-    # implement automation step
-
-    # Step 2
-    # implement automation step
-
-    # Step 3
-    # implement automation step
-
-    return True  # or False
-
+    \"\"\"<describe test>\"\"\"
+    # Step 1: Navigate and validate
+    # Step 2: Perform action
+    # Step N: Assert result
+    return True, "Test passed"
 
 def test_generated(extra):
-
     testoutputname = __name__
-
     try:
-
         action.useVision(True)
-
         if connection_type == "telnet":
             assert stb.connect()
-
         assert tv.connect()
-
         tv.show()
-
         tv.saveVideo(testoutputname)
-
         status, msg = executeTestCase()
-
         assert status, msg
-
         print("Test Case Passed")
-
     except Exception as e:
-
         print("Test Case Failed")
-
         tv.saveframe(testoutputname)
-
-        extra.append(extras.video("file:Videos\\" + testoutputname + ".mp4"))
-        extra.append(extras.image("file:Images\\" + testoutputname + ".png"))
-
+        extra.append(extras.video("file:Videos\\\\" + testoutputname + ".mp4"))
+        extra.append(extras.image("file:Images\\\\" + testoutputname + ".png"))
         raise
-
     finally:
-
         tv.closescreen()
         tv.shutdown()
         time.sleep(10)
 
-
 if __name__ == "__main__":
     test_generated('')
 
-==================================================
-OUTPUT REQUIREMENTS
-==================================================
+Output ONLY the Python script. No markdown fences, no explanation."""
 
-Generate ONLY the Python script.
-
-Do NOT:
-- explain the code
-- output markdown
-- output reasoning
-
-Return only valid executable Python code.
-"""
-
+        logger.info(f"Prompt built: {len(prompt)} chars")
         return prompt
-    
+
+    # ── Self-correction prompt ─────────────────────────────────────────
+
     @staticmethod
     def build_correction_prompt(
         original_script: str,
         validation_errors: List[str],
         user_description: str,
     ) -> str:
-        """
-        Build a self-correction prompt when the first attempt fails validation.
-        """
-        errors_text = "\n".join(f"- {e}" for e in validation_errors)
+        errors = "\n".join(f"- {e}" for e in validation_errors)
         return f"""{PromptBuilder.SYSTEM_PROMPT}
 
-The following script was generated but FAILED quality validation:
+The script below FAILED validation. Fix ALL errors and regenerate.
 
 ```python
 {original_script}
 ```
 
-Validation errors:
-{errors_text}
+Errors:
+{errors}
 
-Original task: {user_description}
+Task: {user_description}
 
-Fix ALL validation errors and regenerate a complete, production-grade script.
-Every function must have real logic — no `pass` statements.
-Include assertions, logging, setup/teardown, and OCR validation.
+Output ONLY the corrected Python script."""
 
-### Corrected Python Test Script:
-```python
-"""
+    # ── Failure analysis prompt ────────────────────────────────────────
 
     @staticmethod
     def build_failure_analysis_prompt(error_traceback: str) -> str:
-        """
-        Build prompt for AI Failure Analyst (SRS Section 5.2).
-        Translates technical errors to non-technical explanations.
-        """
-        return f"""You are a helpful assistant explaining test failures to non-technical users.
+        return f"""Explain this test failure in one simple sentence for a non-technical user:
 
-Translate this technical error into a 1-sentence explanation:
-
-```
 {error_traceback}
-```
 
-Provide a simple, friendly explanation of what went wrong, without technical jargon.
-Response (one sentence only):"""
+Response (one sentence):"""
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# CODE GUARDRAIL
+# ═══════════════════════════════════════════════════════════════════════════
 
 class CodeGuardrail:
     """
-    Static analysis layer to validate LLM-generated code.
-    Checks for syntax, forbidden imports, dangerous patterns,
-    AND production quality (no pass, no empty functions, assertions present).
+    AST-based validation for LLM-generated scripts.
+    Checks: syntax, forbidden imports, dangerous patterns, production quality.
     """
-    
+
     def __init__(self):
         self.forbidden_imports = set(settings.FORBIDDEN_IMPORTS)
         self.max_size = settings.MAX_SCRIPT_SIZE
-    
+
     def validate(self, code: str) -> Tuple[bool, List[str]]:
-        """
-        Validate generated Python code for both security and quality.
-        
-        Returns:
-            Tuple of (is_valid, list_of_errors)
-        """
-        errors = []
-        
+        errors: List[str] = []
+
         if not code or not code.strip():
             return False, ["Generated code is empty"]
 
-        # Check size
-        if len(code.encode('utf-8')) > self.max_size:
-            errors.append(f"Code exceeds maximum size of {self.max_size} bytes")
-        
-        # Check syntax
+        if len(code.encode("utf-8")) > self.max_size:
+            errors.append(f"Code exceeds {self.max_size} bytes")
+
+        # Syntax check
         try:
             tree = ast.parse(code)
         except SyntaxError as e:
-            errors.append(f"Syntax error at line {e.lineno}: {e.msg}")
-            return False, errors
-        
-        # Check for forbidden imports
+            return False, [f"Syntax error line {e.lineno}: {e.msg}"]
+
+        # Forbidden imports
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    module = alias.name.split('.')[0]
-                    if module in self.forbidden_imports:
-                        errors.append(f"Forbidden import: '{module}'")
-            
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    module = node.module.split('.')[0]
-                    if module in self.forbidden_imports:
-                        errors.append(f"Forbidden import: '{module}'")
-        
-        # Check for dangerous patterns
-        dangerous_patterns = [
-            (r'exec\s*\(', "Use of exec() is forbidden"),
-            (r'eval\s*\(', "Use of eval() is forbidden"),
-            (r'__import__\s*\(', "Use of __import__() is forbidden"),
-            (r'compile\s*\(', "Use of compile() is forbidden"),
-            (r'open\s*\([^)]*[\'"]w', "Writing to files is forbidden"),
-        ]
-        
-        for pattern, message in dangerous_patterns:
-            if re.search(pattern, code):
-                errors.append(message)
+                    mod = alias.name.split(".")[0]
+                    if mod in self.forbidden_imports:
+                        errors.append(f"Forbidden import: '{mod}'")
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                mod = node.module.split(".")[0]
+                if mod in self.forbidden_imports:
+                    errors.append(f"Forbidden import: '{mod}'")
 
-        # === QUALITY CHECKS ===
+        # Dangerous patterns
+        for pattern, msg in [
+            (r"exec\s*\(", "exec() forbidden"),
+            (r"eval\s*\(", "eval() forbidden"),
+            (r"__import__\s*\(", "__import__() forbidden"),
+            (r"compile\s*\(", "compile() forbidden"),
+            (r"open\s*\([^)]*['\"]w", "File writing forbidden"),
+        ]:
+            if re.search(pattern, code):
+                errors.append(msg)
+
+        # Quality checks
         self._check_quality(tree, code, errors)
-        
+
         return len(errors) == 0, errors
 
-    def _check_quality(self, tree: ast.AST, code: str, errors: List[str]):
-        """Check for production quality: no pass, no empty functions, assertions present."""
+    @staticmethod
+    def _check_quality(tree: ast.AST, code: str, errors: List[str]):
+        """Enforce production patterns: no pass, no empty functions, assertions required, teardown present."""
         has_assert = False
-        has_disconnect = "disconnect" in code
+        # Match actual teardown pattern used in the template
+        has_teardown = ("tv.closescreen()" in code or "tv.shutdown()" in code)
 
         for node in ast.walk(tree):
-            # Check for `pass` in function bodies (placeholder detection)
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                body = node.body
-                # Skip docstring-only check
+                # Filter out docstring-only bodies
                 real_body = [
-                    n for n in body
+                    n for n in node.body
                     if not (isinstance(n, ast.Expr) and isinstance(n.value, (ast.Constant, ast.Str)))
                 ]
-                if len(real_body) == 0:
-                    errors.append(f"Empty function body: '{node.name}()' has no logic")
+                if not real_body:
+                    errors.append(f"Empty function: '{node.name}()' has no logic")
                 elif len(real_body) == 1 and isinstance(real_body[0], ast.Pass):
-                    errors.append(f"Placeholder function: '{node.name}()' contains only `pass`")
+                    errors.append(f"Placeholder: '{node.name}()' contains only `pass`")
 
             if isinstance(node, ast.Assert):
                 has_assert = True
 
         if not has_assert:
-            errors.append("No assertions found — script must include `assert` statements for validation")
+            errors.append("No assertions — script must include `assert` statements")
 
-        if not has_disconnect:
-            errors.append("Missing teardown — script should call `driver.disconnect()` in finally block")
-    
+        if not has_teardown:
+            errors.append("Missing teardown — must call tv.closescreen() or tv.shutdown() in finally block")
+
     def extract_code_from_response(self, response: str) -> str:
-        """
-        Extract Python code from Ollama response.
-        Handles markdown code blocks.
-        """
-        # Try to extract from markdown code block
-        code_match = re.search(r'```python\s*(.*?)\s*```', response, re.DOTALL)
-        if code_match:
-            return code_match.group(1).strip()
-        
-        # Try generic code block
-        code_match = re.search(r'```\s*(.*?)\s*```', response, re.DOTALL)
-        if code_match:
-            return code_match.group(1).strip()
-        
-        # Return as-is if no code block found
+        """Extract Python code from LLM response, stripping markdown fences."""
+        m = re.search(r"```python\s*(.*?)\s*```", response, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+        m = re.search(r"```\s*(.*?)\s*```", response, re.DOTALL)
+        if m:
+            return m.group(1).strip()
         return response.strip()
 
 
-# Global instances
+# ── Global instances ───────────────────────────────────────────────────────
 library_indexer = LibraryIndexer()
 prompt_builder = PromptBuilder()
 code_guardrail = CodeGuardrail()
